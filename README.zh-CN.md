@@ -1,0 +1,65 @@
+# Voice Satellite
+
+Voice Satellite 是一个独立开源的 ESP32-S3 语音终端项目，用于通过云端语音
+中继唤醒和访问运行在另一台电脑上的 AI Agent。
+
+第一版接入 OpenClaw，但不会公开 OpenClaw Gateway。远端电脑上的 Connector
+主动连接云端 Relay，OpenClaw 凭据始终只保存在本地电脑。
+
+> 本项目是独立社区项目，与 OpenClaw、乐鑫、正点原子和 cc-connect 均无官方
+> 关联，也不代表这些项目对本项目的认可。
+
+## 当前状态
+
+项目目前处于架构和协议定义阶段，暂时还没有可用的固件或服务端 Release。
+正式实现前会先验证板载音频、OpenClaw ACP 和流式 ASR/TTS 的兼容性。
+
+## 总体结构
+
+```text
+ESP32-S3                         云端                     OpenClaw 所在电脑
+┌──────────────────┐   WSS   ┌──────────────────┐   WSS   ┌──────────────────┐
+│ 唤醒/VAD/音频/UI  ├────────►│ Voice Relay      ├────────►│ Local Connector  │
+│ Device Link v1   │◄────────┤ ASR / TTS        │◄────────┤ Agent Link v1    │
+└──────────────────┘  PCM/控制└──────────────────┘  事件   └────────┬─────────┘
+                                                                   │ ACP/stdio
+                                                          ┌────────▼─────────┐
+                                                          │ openclaw acp     │
+                                                          │ localhost Gateway│
+                                                          └──────────────────┘
+```
+
+- **Firmware**：本地唤醒、VAD、录音、播放、屏幕和设备协议，不知道 OpenClaw
+  或语音云厂商。
+- **Relay**：设备鉴权、流式 ASR/TTS、Turn 编排、背压和 Connector 路由，不
+  持有 OpenClaw 凭据。
+- **Connector**：运行在 OpenClaw 电脑上，只建立出站连接，将逻辑会话映射到
+  本机 ACP 会话。
+
+## v1 范围
+
+- ATK-DNESP32S3 + ES8388
+- 独立 ESP-IDF 固件
+- 按键说话，以及可选 ESP-SR WakeNet/VAD 构建
+- 半双工 PCM 音频和 WSS
+- TypeScript Relay 与 Connector
+- OpenClaw ACP 本机适配器
+- 流式回答、取消、屏幕状态和实体键权限确认
+- 签名 OTA、回滚、Fake 组件、协议一致性测试和 SBOM
+
+详细路线见[中文实施计划](docs/roadmap/implementation-plan.zh-CN.md)。
+
+## 设计原则
+
+1. OpenClaw 凭据永远只留在 OpenClaw 电脑。
+2. ACP 只存在于 Connector 本机，不透传到云端或 ESP32。
+3. 协议有版本并在适配器边界进行强校验。
+4. 核心模块只交换语义事件，不交换厂商响应和原始 ACP JSON。
+5. 所有队列有上限；状态不确定的 Agent 操作不得盲目重放。
+6. 永久提供不依赖 ESP-SR 的按键说话构建。
+7. 本项目是独立实现，不是 cc-connect 的 fork 或兼容实现。
+
+## 开源许可
+
+项目原创代码和文档使用 Apache-2.0。ESP-SR/WakeNet 等可选依赖有独立许可，
+不能重新标记为 Apache-2.0。详见[许可说明](docs/licensing.md)。
