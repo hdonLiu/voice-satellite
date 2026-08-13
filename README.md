@@ -1,12 +1,13 @@
 # Voice Satellite
 
-Voice Satellite is an independent, open-source voice terminal for connecting
-ESP32-S3 hardware to a remotely hosted AI agent.
+Voice Satellite is an independent, open-source protocol and reference system for
+connecting voice-capable devices to a remotely hosted AI agent. ESP32-S3 is the
+first device implementation.
 
-The first supported agent is OpenClaw through its local ACP bridge. OpenClaw
-stays on the user's computer: a small Connector makes an outbound WebSocket
-connection to a cloud Relay, so the OpenClaw Gateway and its credentials never
-need to be exposed to the public internet.
+The first supported agent is OpenClaw through its local ACP bridge. One
+Connector activates one replaceable AgentRuntime. OpenClaw stays on the user's
+computer: the Connector makes an outbound WebSocket connection to a cloud Relay,
+so the OpenClaw Gateway and its credentials never need to be exposed publicly.
 
 > This is an independent community project. It is not affiliated with or
 > endorsed by OpenClaw, Espressif, ALIENTEK, or cc-connect.
@@ -25,7 +26,7 @@ hardware and ACP compatibility spikes before the v1 protocols are frozen.
 ESP32-S3                         Cloud                       OpenClaw computer
 ┌──────────────────┐   WSS   ┌──────────────────┐   WSS   ┌──────────────────┐
 │ wake/VAD/audio/UI├─────────►│ Voice Relay      ├─────────►│ Local Connector   │
-│ Device Link v1   │◄─────────┤ ASR / TTS        │◄─────────┤ Agent Link v1     │
+│ Device Link v1   │◄─────────┤ ASR / TTS        │◄─────────┤ Connector Link v1 │
 └──────────────────┘  PCM/ctl └──────────────────┘  events └────────┬─────────┘
                                                                     │ ACP/stdio
                                                            ┌────────▼─────────┐
@@ -36,14 +37,15 @@ ESP32-S3                         Cloud                       OpenClaw computer
 
 The system has three independently deployable units:
 
-- **Firmware** — local wake detection, VAD, audio capture/playback, UI, and a
-  narrow Device Link protocol. It knows nothing about OpenClaw or speech-cloud
-  vendors.
+- **Device implementation** — local wake detection, VAD, audio capture/playback,
+  UI, and a narrow Device Link protocol. ESP32 is the first reference device;
+  implementations for other device platforms can use the same protocol.
 - **Relay** — device authentication, streaming ASR/TTS, turn orchestration,
   backpressure, and Connector routing. It never receives OpenClaw credentials.
 - **Connector** — an outbound-only client on the OpenClaw computer. It maps
   logical conversations to local ACP sessions and exposes only a narrow agent
-  event surface to the Relay.
+  event surface to the Relay. A Connector activates exactly one AgentRuntime;
+  OpenClaw is the first replaceable implementation.
 
 See [Architecture Overview](docs/architecture/overview.md) and
 [Module Boundaries](docs/architecture/module-boundaries.md).
@@ -68,15 +70,22 @@ See the [Implementation Plan](docs/roadmap/implementation-plan.md).
 3. Wire messages are versioned and strongly validated at adapter boundaries.
 4. Core modules exchange semantic events, not vendor responses or raw ACP frames.
 5. Every queue is bounded; uncertain agent operations are never replayed blindly.
-6. Push-to-talk remains available without ESP-SR or proprietary wake-word models.
-7. The project is an independent implementation, not a cc-connect fork or clone.
+6. Device implementations are interchangeable behind Device Link v1.
+7. A Connector runs one replaceable AgentRuntime; Relay never selects an agent.
+8. Push-to-talk remains available without ESP-SR or proprietary wake-word models.
+9. The project is an independent implementation, not a cc-connect fork or clone.
 
 ## Repository layout
 
 ```text
 apps/relay/             Cloud Relay application
 apps/connector/         Outbound local Connector
-firmware/               ESP32-S3 firmware
+  src/adapters/agents/
+    openclaw/            First AgentRuntime adapter
+devices/
+  esp32/                 First Device Link reference implementation
+    boards/
+      atk-dnesp32s3/     First ESP32 board adapter
 packages/contracts/     Versioned wire schemas and generated DTOs
 packages/testkit/       Fake devices/providers/agents
 specs/                  Protocol specifications

@@ -10,7 +10,7 @@ The dependency direction is always:
 adapters -> ports/application -> domain
 ```
 
-## Firmware modules
+## Device implementation modules
 
 ```text
 BoardHAL | AudioFrontend | WakeDetector | VoiceTransport | DeviceView
@@ -56,7 +56,7 @@ Forbidden dependencies:
 
 ```text
 RelayClient -> ConnectorCoordinator -> AgentBackend -> AgentConversation
-                                                   -> OpenClaw ACP adapter
+                                                   -> configured Agent adapter
 ```
 
 Stable ports:
@@ -87,7 +87,7 @@ Only these concepts cross component boundaries:
 - `AudioFormat`
 - typed control and agent events
 
-The local OpenClaw ACP/Gateway session identifier never appears on a public wire.
+The native agent session identifier never appears on a public wire.
 
 ## Extension policy
 
@@ -96,8 +96,13 @@ v1 has four deliberate extension points:
 1. board/audio adapter
 2. streaming ASR adapter
 3. streaming TTS adapter
-4. agent-runtime adapter
+4. single agent-runtime adapter
 
-New registries and plugin systems are introduced only after a second real
-implementation demonstrates a stable abstraction. Capability enums are
-preferred over a large collection of optional marker interfaces.
+Device platforms are separated under `devices/<platform>`, with platform-specific
+board adapters below them. Agent adapters are separated under
+`apps/connector/src/adapters/agents/<agent>`.
+
+Agent adapters are deployment-time alternatives. One Connector activates
+exactly one adapter, and Connector Link contains no `agentId`, alias, backend
+selector, or multi-agent routing. Capability enums handle differences between
+agent runtimes and device implementations without large marker-interface trees.

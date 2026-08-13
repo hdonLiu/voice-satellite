@@ -5,12 +5,12 @@ coverage/
 .pnpm-store/
 *.tsbuildinfo
 
-# ESP-IDF
-firmware/build/
-firmware/managed_components/
-firmware/sdkconfig
-firmware/sdkconfig.old
-firmware/dependencies.lock.local
+# ESP-IDF device implementations
+devices/*/build/
+devices/*/managed_components/
+devices/*/sdkconfig
+devices/*/sdkconfig.old
+devices/*/dependencies.lock.local
 
 # Local configuration and secrets
 .env

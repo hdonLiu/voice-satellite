@@ -36,8 +36,10 @@ P0 兼容性验证
 ## P1：仓库、领域模型和协议冻结，5–7 人日
 
 - 初始化 pnpm、strict TypeScript、ESP-IDF、CI、格式化、测试和依赖锁。
+- 将 `devices/esp32/boards/atk-dnesp32s3` 建为首个设备/板级适配器，将
+  `apps/connector/src/adapters/agents/openclaw` 建为首个单 Agent 适配器。
 - 实现各类 ID、Turn 状态机和稳定错误码。
-- 冻结 Device Link v1、Connector Link v1 和二进制音频头。
+- 冻结 Device Link v1、Connector Link v1、设备/Agent 能力和二进制音频头。
 - 发布 JSON Schema 和生成 DTO。
 - 建立 Fake Device、ASR、TTS、Connector、Relay 和 Fake ACP executable。
 - 建立合法、非法、取消、超时和断线 Golden Trace。
@@ -51,6 +53,8 @@ Relay 完成设备/Connector WSS、分离鉴权、连接注册、`TurnOrchestrat
 
 Connector 完成主动出站、hello/ready、心跳、指数退避、请求去重、Fake
 AgentRuntime、流式 delta、取消和终态。
+
+Fake AgentRuntime 必须与后续 OpenClaw 使用同一端口，协议不包含 Agent 选择。
 
 必须跑通：
 
@@ -86,6 +90,7 @@ Fake Device PCM → Relay → Fake ASR → Connector → Fake Agent
 
 ### OpenClaw ACP
 
+- 实现在 `apps/connector/src/adapters/agents/openclaw` 目录。
 - `shell: false` 启动并监督 `openclaw acp`。
 - stdout 只承载协议，stderr 只承载日志。
 - 初始化、会话绑定、prompt、delta、cancel 和终态映射。
@@ -147,7 +152,8 @@ doctor、自恢复和原子会话映射。
 
 v1.0 门槛：无需公开 OpenClaw 电脑端口；凭据不出本机；三轮上下文、流式播放、
 取消和实体权限均工作；500 Turn 无串线、旧音频或永久卡死；非法版本、角色、
-大小和会话选择全部被拒绝。
+大小和会话选择全部被拒绝；Fake Device 替换 ESP32 不修改 Relay/Connector；
+Fake AgentRuntime 与 OpenClaw 互换不修改 Relay、Device Link 或 Connector Link。
 
 ## 工作量
 

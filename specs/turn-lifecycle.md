@@ -49,7 +49,7 @@ Cancellation is idempotent and propagates through every active stage:
 turn.cancel
   -> stop device capture/playback
   -> abort ASR
-  -> agent.cancel -> ACP session/cancel
+  -> agent.cancel -> AgentRuntime.cancel
   -> abort TTS
   -> drop late events
   -> turn.done(cancelled)

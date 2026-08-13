@@ -20,6 +20,11 @@ error.
 
 v1 allows one active turn and one active audio stream per connection.
 
+`DeviceId` is an issued logical identity. It must not be defined as a MAC
+address, chip ID, board model, GPIO layout, or operating system. Platform, board,
+and firmware version may be reported as diagnostic metadata but never become
+domain routing keys.
+
 ## Control envelope
 
 ```json
@@ -76,6 +81,27 @@ v1 baseline:
 
 Opus and alternative rates require a future negotiated capability and are not
 part of the v1 baseline.
+
+## Device capabilities
+
+`device.hello` describes supported input/output formats and optional features.
+The P1 schema must represent at least:
+
+```text
+audio.input.formats
+audio.output.formats
+features.wakeWord
+features.vad
+features.display
+features.buttons
+features.permissionApproval
+features.ota
+features.bargeIn
+```
+
+Relay selects only mutually supported behavior. Missing display, wake, approval,
+or output capability must produce explicit degradation rather than platform-name
+checks in the turn orchestrator.
 
 ## Binary audio header
 

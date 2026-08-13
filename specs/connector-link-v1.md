@@ -27,6 +27,10 @@ permission
 
 Relay marks the Connector routable only after `connector.ready`.
 
+One Connector activates exactly one locally configured AgentRuntime. Connector
+Link does not contain `agentId`, `agentAlias`, `backend`, native session key, or
+any other field that lets Relay select an agent.
+
 ## Envelope
 
 ```json
@@ -72,9 +76,10 @@ Wire DTOs are validated at adapter boundaries and converted into domain types.
 
 ## Session isolation
 
-Relay provides `conversationId`, never an OpenClaw session ID. Connector maps the
-logical ID to a locally authorized session. Remote inputs cannot select the
-OpenClaw agent, Gateway URL, token, workspace, filesystem path, or session key.
+Relay provides `conversationId`, never a native agent session ID. Connector maps
+the logical ID to a locally authorized session in its single configured runtime.
+Remote inputs cannot select the agent implementation, native endpoint,
+credential, workspace, filesystem path, or session key.
 
 ## Delivery and replay
 

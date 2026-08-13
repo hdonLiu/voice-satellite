@@ -10,6 +10,10 @@ Connector, adapters, tests, and documentation.
 3. Keep dependency direction as `adapters -> ports/application -> domain`.
 4. Do not introduce OpenClaw, ACP, or speech-provider details into firmware.
 5. Do not introduce PCM, VAD, or ESP32 details into the Connector.
+6. Add device platforms under `devices/<platform>` and agent adapters under
+   `apps/connector/src/adapters/agents/<agent>`.
+7. Keep each Connector single-Agent; do not add remote agent selectors or a
+   multi-agent registry.
 
 ## Independent implementation rule
 

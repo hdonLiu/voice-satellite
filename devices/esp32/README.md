@@ -1,7 +1,11 @@
-# ESP32-S3 firmware
+# ESP32 device implementation
 
-The first board target is ATK-DNESP32S3 with ES8388. Firmware is an independent
-ESP-IDF project and does not include XiaoZhi networking, protocol, or agent code.
+ESP32 is the first Device Link reference implementation. Its first board target
+is ATK-DNESP32S3 with ES8388. Firmware is an independent ESP-IDF project and
+does not include XiaoZhi networking, protocol, or agent code.
+
+Board-specific details live under `boards/<board>`. Shared ESP32 state, protocol,
+audio, transport, storage, and OTA code must not depend on a concrete board.
 
 Planned profiles:
 

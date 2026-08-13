@@ -14,6 +14,10 @@ running on another computer without exposing that computer's Gateway publicly.
 - Build an independent ESP-IDF firmware, cloud Relay, and outbound Connector.
 - Define independent Device Link and Connector Link protocols.
 - Keep the core agent-neutral and provide OpenClaw ACP as the first adapter.
+- Organize device implementations under `devices/<platform>` and AgentRuntime
+  implementations under `apps/connector/src/adapters/agents/<agent>`.
+- Activate exactly one AgentRuntime per Connector; do not implement multi-agent
+  routing or remote agent selection.
 - Use cc-connect only as evidence that outbound Connector and modular boundary
   patterns are useful; do not copy or implement its private interfaces.
 - Keep v1 single-device, half-duplex, PCM, and single-node.

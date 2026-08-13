@@ -63,9 +63,12 @@ Estimate: 5–7 days.
 
 - Initialize pnpm workspace, strict TypeScript, ESP-IDF project, CI, formatting,
   tests, license checking, and dependency locks.
+- Establish `devices/esp32/boards/atk-dnesp32s3` as the first device platform
+  and board adapter, and
+  `apps/connector/src/adapters/agents/openclaw` as the first single-Agent adapter.
 - Implement domain identifiers and the turn state machine.
 - Finalize Device Link v1 and Connector Link v1 envelopes, audio header, error
-  codes, capability negotiation, size limits, and failure semantics.
+  codes, device/agent capability negotiation, size limits, and failure semantics.
 - Publish JSON Schemas and generated TypeScript DTOs.
 - Build Fake Device, ASR, TTS, Connector, Relay, and ACP executable.
 - Add valid and invalid golden traces.
@@ -93,6 +96,7 @@ Estimate: 7–10 days.
 - outbound WSS, hello/ready, heartbeat, exponential reconnect with jitter
 - request dispatch, bounded duplicate window, and Fake AgentRuntime
 - text deltas, cancellation, terminal event and error mapping
+- prove that Fake AgentRuntime and the future OpenClaw adapter use the same port
 
 ### Exit criteria
 
@@ -132,6 +136,7 @@ starts on completed segments; cancellation stops all later audio.
 
 ### P3C: OpenClaw ACP
 
+- implement under `apps/connector/src/adapters/agents/openclaw`
 - supervise `openclaw acp` with `shell: false`
 - keep stdout protocol-only and stderr log-only
 - implement initialize, session binding, prompt, update, cancel, and terminal maps
@@ -237,6 +242,10 @@ Estimate: 5–8 days.
 ### v1.0 exit criteria
 
 - public documentation is sufficient to build, flash, deploy, and connect
+- a conforming Fake Device can replace the ESP32 implementation without changes
+  to Relay or Connector
+- Fake AgentRuntime and OpenClaw can replace each other without changes to Relay,
+  Device Link, or Connector Link
 - OpenClaw computer exposes no inbound public port
 - OpenClaw credentials never appear in Relay or firmware
 - three-turn context, streaming audio, cancellation, and physical approval work
