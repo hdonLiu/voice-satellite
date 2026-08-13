@@ -38,6 +38,7 @@ jobs:
         working-directory: devices/esp32
         shell: bash
         run: |
+          source /opt/esp/idf/export.sh
           if [[ "${{ matrix.profile }}" == "wakenet" ]]; then
             idf.py -DVS_FIRMWARE_PROFILE=wakenet \
               -D'SDKCONFIG_DEFAULTS=sdkconfig.defaults;profiles/wakenet/sdkconfig.defaults' \
