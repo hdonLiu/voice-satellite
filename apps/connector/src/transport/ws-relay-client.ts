@@ -86,15 +86,6 @@ export class WsRelayClient {
     const send = async (message: object): Promise<void> => {
       await sendJson(socket, message);
     };
-    await send({
-      v: 1,
-      type: "connector.hello",
-      seq: outgoingSeq++,
-      payload: {
-        softwareVersion: this.options.softwareVersion ?? "0.1.0",
-        agent: "openclaw",
-      },
-    });
     const closed = new Promise<void>((resolve) =>
       socket.once("close", () => resolve()),
     );
@@ -142,15 +133,20 @@ export class WsRelayClient {
                 throw new Error(
                   "received agent.run while another request is active",
                 );
-              this.#activeAbort = new AbortController();
-              void this.#run(
-                message,
-                connectionId,
-                () => outgoingSeq++,
-                send,
-              ).finally(() => {
-                this.#activeAbort = undefined;
-              });
+              {
+                const controller = new AbortController();
+                this.#activeAbort = controller;
+                void this.#run(
+                  message,
+                  connectionId,
+                  () => outgoingSeq++,
+                  send,
+                  controller.signal,
+                ).finally(() => {
+                  if (this.#activeAbort === controller)
+                    this.#activeAbort = undefined;
+                });
+              }
               break;
             case "agent.cancel":
               this.#activeAbort?.abort(
@@ -172,6 +168,14 @@ export class WsRelayClient {
         })
         .catch(() => socket.close(4002, "invalid relay message"));
     });
+    await send({
+      v: 1,
+      type: "connector.hello",
+      seq: outgoingSeq++,
+      payload: {
+        softwareVersion: this.options.softwareVersion ?? "0.1.0",
+      },
+    });
     await closed;
     this.#activeAbort?.abort(
       new DOMException("relay disconnected", "AbortError"),
@@ -186,6 +190,7 @@ export class WsRelayClient {
     connectionId: ConnectionId,
     nextSequence: () => number,
     send: (message: object) => Promise<void>,
+    signal: AbortSignal,
   ): Promise<void> {
     const request: AgentRequest = {
       deviceId: asId<"DeviceId">(message.deviceId),
@@ -204,10 +209,7 @@ export class WsRelayClient {
       requestId: request.requestId,
     } as const;
     try {
-      for await (const event of this.coordinator.run(
-        request,
-        this.#activeAbort!.signal,
-      )) {
+      for await (const event of this.coordinator.run(request, signal)) {
         switch (event.type) {
           case "accepted":
             await send({
@@ -263,7 +265,7 @@ export class WsRelayClient {
         }
       }
     } catch (error) {
-      const aborted = this.#activeAbort?.signal.aborted;
+      const aborted = signal.aborted;
       const stable = toStableError(error);
       await send({
         ...base,

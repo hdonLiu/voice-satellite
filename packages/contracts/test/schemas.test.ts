@@ -74,10 +74,21 @@ describe("protocol unions", () => {
         v: 1,
         type: "connector.hello",
         seq: 0,
-        payload: { softwareVersion: "0.1.0", agent: "openclaw" },
+        payload: { softwareVersion: "0.1.0" },
       },
     ],
   ] as const)("accepts a valid message", (schema, message) => {
     expect(parseSchema(schema, message)).toEqual(message);
+  });
+
+  it("rejects remote Agent selection in the Connector hello", () => {
+    expect(() =>
+      parseSchema(ConnectorToRelaySchema, {
+        v: 1,
+        type: "connector.hello",
+        seq: 0,
+        payload: { softwareVersion: "0.1.0", agent: "openclaw" },
+      }),
+    ).toThrow(ProtocolValidationError);
   });
 });

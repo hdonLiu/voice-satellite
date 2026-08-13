@@ -41,8 +41,12 @@ export class RemoteAgentPort implements AgentPort {
   }
 
   public attach(socket: WebSocket, connectionId: ConnectionId): void {
-    if (this.#socket && this.#socket.readyState === this.#socket.OPEN) {
-      this.#socket.close(4009, "replaced by a new connector");
+    const previous = this.#socket;
+    if (previous) {
+      this.#failPendingForDisconnect();
+      if (previous.readyState === previous.OPEN) {
+        previous.close(4009, "replaced by a new connector");
+      }
     }
     this.#socket = socket;
     this.#connectionId = connectionId;
@@ -85,6 +89,10 @@ export class RemoteAgentPort implements AgentPort {
     this.#socket = undefined;
     this.#connectionId = undefined;
     this.#ready = false;
+    this.#failPendingForDisconnect();
+  }
+
+  #failPendingForDisconnect(): void {
     for (const pending of this.#pending.values()) {
       pending.events.fail(
         new VoiceSatelliteError(
@@ -108,6 +116,12 @@ export class RemoteAgentPort implements AgentPort {
       throw new VoiceSatelliteError(
         "invalid_state",
         "duplicate agent request id",
+      );
+    }
+    if (this.#pending.size > 0) {
+      throw new VoiceSatelliteError(
+        "busy",
+        "connector already has an active request",
       );
     }
     const events = new BoundedAsyncQueue<AgentEvent>(256);

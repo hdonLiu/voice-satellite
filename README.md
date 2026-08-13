@@ -20,8 +20,9 @@ The complete v1 reference path is implemented: strict Device/Connector links,
 single-node Relay, OpenAI speech adapters, outbound Connector, OpenClaw ACP
 runtime, and ESP-IDF firmware for ATK-DNESP32S3. Automated tests cover schema
 validation, binary audio, bounded queues, 100 turns, provider adapters, fake ACP,
-and a real WebSocket device-to-agent-to-device loop. Hardware smoke testing and
-deployment are still required before a release; see the
+and a real WebSocket device-to-agent-to-device loop. CI also performs clean PTT
+and WakeNet firmware builds. Hardware smoke testing and deployment are still
+required before a release; see the
 [implementation status](docs/roadmap/implementation-status.md).
 
 ## Architecture
@@ -63,7 +64,7 @@ contracts are in the [Detailed Design](docs/design/detailed-design.zh-CN.md).
 - Single-node TypeScript Relay with pluggable streaming ASR and TTS providers
 - TypeScript Connector using `openclaw acp` over local stdio
 - Streaming text-to-speech, cancellation, status display, and physical approval
-- Protocol fixtures, fake components, conformance tests, SBOMs, and signed releases
+- Protocol validators, fake components, and conformance-style integration tests
 
 See the [Implementation Plan](docs/roadmap/implementation-plan.md) and the
 [task-level execution plan](docs/roadmap/execution-plan.zh-CN.md).

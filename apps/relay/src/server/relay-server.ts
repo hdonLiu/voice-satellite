@@ -8,7 +8,6 @@ import {
   DeviceHelloSchema,
   type ConnectorId,
   type DeviceId,
-  VoiceSatelliteError,
   asId,
   newId,
   parseJsonSchema,
@@ -187,11 +186,6 @@ export class RelayServer {
       this.options.handshakeTimeoutMs ?? 5_000,
       async (raw) => {
         const hello = parseJsonSchema(ConnectorHelloSchema, raw);
-        if (hello.payload.agent !== "openclaw")
-          throw new VoiceSatelliteError(
-            "invalid_message",
-            "unsupported agent kind",
-          );
         const connectionId = newId<"ConnectionId">();
         this.#agent.attach(socket, connectionId);
         this.#agent.markHello(hello.seq);

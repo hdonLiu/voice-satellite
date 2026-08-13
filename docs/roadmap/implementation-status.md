@@ -28,14 +28,14 @@ and exit gates remain in the
 - ESP-IDF firmware organized behind a board port, with ATK-DNESP32S3 ES8388,
   24-to-16 kHz capture conversion, bounded playback, PTT, optional WakeNet,
   energy endpointing, NVS config, TLS verification, and physical approval
+- clean ESP-IDF 5.5.2 CI builds for both the dependency-light PTT profile and
+  the ESP-SR WakeNet profile
 - deterministic fake speech/agent/device components and tests covering 100 turns,
   cancellation, permission denial, provider HTTP contracts, fake ACP, persistence,
   and a real WebSocket audio-to-audio network loop
 
-## Pending outside implementation
+## Pending deployment, qualification, and release decisions
 
-- install an ESP-IDF toolchain and perform a clean firmware build in the target
-  deployment environment
 - flash and qualify the physical ATK board (codec gain, acoustic thresholds,
   WakeNet model selection, long-run DMA and Wi-Fi stability)
 - provide actual domain/TLS termination, credentials, OpenAI account settings,

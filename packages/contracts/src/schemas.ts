@@ -155,7 +155,6 @@ export const ConnectorHelloSchema = StrictObject({
   seq: Type.Literal(0),
   payload: StrictObject({
     softwareVersion: Type.String({ minLength: 1, maxLength: 64 }),
-    agent: Type.Literal("openclaw"),
   }),
 });
 export const ConnectorWelcomeSchema = StrictObject({

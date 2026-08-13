@@ -144,6 +144,9 @@ export class TurnOrchestrator {
           break;
         }
         const event: AgentEvent = next.value;
+        if (!accepted && event.type === "error") {
+          throw new VoiceSatelliteError(event.code, event.message);
+        }
         if (!accepted && event.type !== "accepted") {
           throw new VoiceSatelliteError(
             "invalid_message",

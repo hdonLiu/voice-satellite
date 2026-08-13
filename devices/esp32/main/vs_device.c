@@ -331,6 +331,10 @@ static void process_button(bool pressed) {
         cancel_turn();
         return;
     }
+    if (pressed && device.state == DEVICE_WAITING) {
+        cancel_turn();
+        return;
+    }
     if (pressed && device.state == DEVICE_IDLE) {
         begin_capture();
         return;

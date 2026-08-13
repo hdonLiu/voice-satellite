@@ -14,7 +14,8 @@ Voice Satellite 是一个独立开源的语音设备协议和参考系统，用�
 v1 参考链路已经完整实现：严格的两条 Wire Link、单节点 Relay、OpenAI 语音
 Adapter、出站 Connector、OpenClaw ACP Runtime，以及 ATK-DNESP32S3 的
 ESP-IDF 固件。自动测试覆盖二进制音频、100 Turn、Fake ACP 和真实 WebSocket
-音频闭环；正式发布前仍需完成硬件验证与部署。详见
+音频闭环，CI 同时对 PTT 与 WakeNet 两种固件做干净构建；正式发布前仍需完成
+硬件验证与部署。详见
 [实现状态](docs/roadmap/implementation-status.md)。
 
 ## 总体结构
@@ -48,7 +49,7 @@ ESP32-S3                         云端                     OpenClaw 所在电�
 - TypeScript Relay 与 Connector
 - OpenClaw ACP 本机适配器
 - 流式回答、取消、屏幕状态和实体键权限确认
-- Fake 组件、协议一致性测试和 SBOM
+- Fake 组件与协议一致性集成测试
 
 详细路线见[详细技术设计](docs/design/detailed-design.zh-CN.md)、
 [阶段计划](docs/roadmap/implementation-plan.md)和
