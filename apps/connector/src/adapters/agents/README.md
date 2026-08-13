@@ -13,6 +13,7 @@ A Connector is configured with exactly one adapter. These directories are
 alternative implementations, not a runtime registry: Connector Link has no
 `agentId`, alias, backend selector, or multi-agent routing message.
 
-Every adapter maps its native API into the same semantic events and declares its
-capabilities, such as streaming text, cancellation, session resume, status, and
-permission requests. Unsupported capabilities degrade explicitly.
+Every v1 adapter maps its native API into the same mandatory semantic contract:
+monotonic text deltas, cancellation, local session resume, filtered status, and
+structured permission requests. An adapter that cannot satisfy the contract is
+not marked ready; Relay does not maintain per-agent degradation branches.

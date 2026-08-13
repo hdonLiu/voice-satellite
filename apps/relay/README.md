@@ -11,7 +11,7 @@ src/
   application/
   ports/
   adapters/device-ws/
-  adapters/connector-ws/
+  adapters/agent-port-ws/
   adapters/asr/
   adapters/tts/
   bootstrap/
@@ -19,3 +19,6 @@ src/
 
 The Relay must not contain ACP JSON-RPC, Gateway session keys, OpenClaw
 credentials, board GPIOs, or codec-specific behavior.
+
+`AgentPort` is the only Relay application boundary toward Connector. The WSS
+adapter implements that port by speaking Connector Link.

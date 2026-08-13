@@ -4,6 +4,9 @@ This plan takes Voice Satellite from an architecture-only repository to an
 open-source v1.0 release. Estimates are engineering days and assume familiarity
 with ESP-IDF and TypeScript.
 
+The task IDs, dependencies, artifacts, and gates used for execution are defined
+in the [task-level execution plan](execution-plan.zh-CN.md).
+
 ## Release definition
 
 v1.0 delivers one ESP32-S3 device, one single-node Relay, one outbound Connector,
@@ -67,8 +70,9 @@ Estimate: 5–7 days.
   and board adapter, and
   `apps/connector/src/adapters/agents/openclaw` as the first single-Agent adapter.
 - Implement domain identifiers and the turn state machine.
-- Finalize Device Link v1 and Connector Link v1 envelopes, audio header, error
-  codes, device/agent capability negotiation, size limits, and failure semantics.
+- Finalize Device Link v1 and Connector Link v1 envelopes, the fixed v1 audio
+  contract, minimal Device hello payload, mandatory AgentRuntime contract, audio
+  header, small stable error set, size limits, and failure semantics.
 - Publish JSON Schemas and generated TypeScript DTOs.
 - Build Fake Device, ASR, TTS, Connector, Relay, and ACP executable.
 - Add valid and invalid golden traces.
@@ -256,16 +260,16 @@ Estimate: 5–8 days.
 
 ## Estimate
 
-| Phase | Days |
-|---|---:|
-| P0 | 5–8 |
-| P1 | 5–7 |
-| P2 | 7–10 |
-| P3 | 20–30 |
-| P4 | 6–10 |
-| P5 | 8–12 |
-| P6 | 10–15 |
-| P7 | 5–8 |
+| Phase     |       Days |
+| --------- | ---------: |
+| P0        |        5–8 |
+| P1        |        5–7 |
+| P2        |       7–10 |
+| P3        |      20–30 |
+| P4        |       6–10 |
+| P5        |       8–12 |
+| P6        |      10–15 |
+| P7        |        5–8 |
 | **Total** | **66–100** |
 
 One engineer should expect roughly 14–20 weeks. Three parallel owners for

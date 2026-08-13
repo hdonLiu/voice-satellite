@@ -1,0 +1,9 @@
+dist
+coverage
+managed_components
+sdkconfig
+sdkconfig.old
+pnpm-lock.yaml
+.github/ISSUE_TEMPLATE/bug.yml
+.markdownlint.jsonc
+THIRD_PARTY_NOTICES.md

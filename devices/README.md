@@ -14,6 +14,6 @@ Only `esp32/` exists in v1. A new platform must implement the same versioned
 Device Link contract and pass the shared conformance suite; it must not require
 changes to Relay turn orchestration or Connector agent logic.
 
-Platform and board metadata are diagnostic capabilities, not routing keys or
+Platform and board metadata are diagnostic fields, not routing keys or
 domain identities. `DeviceId` is an issued logical identity and must not be
 defined as a MAC address, chip ID, GPIO layout, or board model.

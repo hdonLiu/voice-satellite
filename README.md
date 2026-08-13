@@ -16,9 +16,10 @@ so the OpenClaw Gateway and its credentials never need to be exposed publicly.
 
 ## Status
 
-The project is in its architecture and protocol-definition phase. There is no
-usable firmware or server release yet. The implementation will proceed through
-hardware and ACP compatibility spikes before the v1 protocols are frozen.
+Core implementation has started. The contracts, Relay/Connector application
+ports, bounded turn orchestrator, fake adapters, and a 100-turn all-Fake vertical
+slice are running in CI. There is no usable firmware or server release yet; see
+the [implementation status](docs/roadmap/implementation-status.md).
 
 ## Architecture
 
@@ -48,7 +49,8 @@ The system has three independently deployable units:
   OpenClaw is the first replaceable implementation.
 
 See [Architecture Overview](docs/architecture/overview.md) and
-[Module Boundaries](docs/architecture/module-boundaries.md).
+[Module Boundaries](docs/architecture/module-boundaries.md). The implementation
+contracts are in the [Detailed Design](docs/design/detailed-design.zh-CN.md).
 
 ## Planned v1 scope
 
@@ -61,7 +63,8 @@ See [Architecture Overview](docs/architecture/overview.md) and
 - Signed firmware OTA with rollback
 - Protocol fixtures, fake components, conformance tests, SBOMs, and signed releases
 
-See the [Implementation Plan](docs/roadmap/implementation-plan.md).
+See the [Implementation Plan](docs/roadmap/implementation-plan.md) and the
+[task-level execution plan](docs/roadmap/execution-plan.zh-CN.md).
 
 ## Design principles
 
@@ -74,6 +77,9 @@ See the [Implementation Plan](docs/roadmap/implementation-plan.md).
 7. A Connector runs one replaceable AgentRuntime; Relay never selects an agent.
 8. Push-to-talk remains available without ESP-SR or proprietary wake-word models.
 9. The project is an independent implementation, not a cc-connect fork or clone.
+
+Replaceability does not imply Relay scale-out: v1 runs one Relay process with
+in-memory active-turn state and recovers at the next turn after a restart.
 
 ## Repository layout
 

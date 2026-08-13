@@ -5,7 +5,7 @@ OpenClaw is the first implementation of Connector's `AgentRuntimePort`.
 The adapter will:
 
 - supervise `openclaw acp` as a local stdio child process
-- negotiate ACP capabilities
+- initialize ACP and verify the operations required by the v1 contract
 - map logical conversations to locally authorized OpenClaw sessions
 - convert prompt, streaming update, cancellation, permission, and terminal events
 - filter thoughts, secrets, local paths, raw tool I/O, and unknown events

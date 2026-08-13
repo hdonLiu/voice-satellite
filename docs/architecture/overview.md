@@ -26,8 +26,8 @@ Primary responsibilities:
 ### Relay
 
 The Relay is the only turn orchestrator. It terminates public device and
-Connector connections, sends audio to ASR, sends final transcripts to the
-Connector, segments agent text for TTS, and streams audio to the device.
+Connector connections, sends audio to ASR, sends final transcripts through its
+`AgentPort`, segments agent text for TTS, and streams audio to the device.
 
 It does not know ACP message shapes, Gateway session keys, board GPIOs, or
 OpenClaw credentials.
@@ -63,13 +63,13 @@ adapter. Exactly one adapter is active per Connector.
 
 ## Trust boundaries
 
-| Boundary | Trust statement |
-|---|---|
-| Device to Relay | Device token identifies one device; all input is untrusted and bounded |
-| Relay to Connector | Connector accepts only typed agent commands for locally allowed sessions |
-| Connector to AgentRuntime | Native agent credentials and session IDs never cross into Relay |
-| Relay to speech provider | Provider sees audio/text required for ASR/TTS; no OpenClaw credential |
-| Voice to tools | Voice is not strong authentication; sensitive operations require separate approval |
+| Boundary                  | Trust statement                                                                    |
+| ------------------------- | ---------------------------------------------------------------------------------- |
+| Device to Relay           | Device token identifies one device; all input is untrusted and bounded             |
+| Relay to Connector        | Connector accepts only typed agent commands for locally allowed sessions           |
+| Connector to AgentRuntime | Native agent credentials and session IDs never cross into Relay                    |
+| Relay to speech provider  | Provider sees audio/text required for ASR/TTS; no OpenClaw credential              |
+| Voice to tools            | Voice is not strong authentication; sensitive operations require separate approval |
 
 ## Failure semantics
 
@@ -90,7 +90,7 @@ adapter. Exactly one adapter is active per Connector.
 - One configured AgentRuntime per Connector; no multi-agent routing
 - No durable turn queue and no exactly-once tool execution claim
 
-## Horizontal replacement model
+## Replacement and recovery model
 
 Device implementations live under `devices/<platform>`. Board adapters are
 nested under their platform, such as
@@ -101,3 +101,10 @@ Agent implementations live under
 `apps/connector/src/adapters/agents/<agent>`. OpenClaw is the first directory.
 A different agent replaces that adapter behind `AgentRuntimePort`; it does not
 add simultaneous multi-agent routing.
+
+This is adapter replaceability, not Relay scale-out. v1 deliberately supports a
+single Relay process with in-memory active connections and turns. A Relay
+restart may fail the current turn, but authenticated devices and Connectors can
+reconnect and start the next turn without restoring process-local state. Running
+multiple Relay instances, sticky routing, distributed connection ownership, and
+durable turn recovery are outside the v1 contract.

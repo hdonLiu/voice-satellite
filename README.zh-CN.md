@@ -11,8 +11,9 @@ Voice Satellite 是一个独立开源的语音设备协议和参考系统，用�
 
 ## 当前状态
 
-项目目前处于架构和协议定义阶段，暂时还没有可用的固件或服务端 Release。
-正式实现前会先验证板载音频、OpenClaw ACP 和流式 ASR/TTS 的兼容性。
+核心实现已开始：契约、Relay/Connector 稳定 Port、有界 Turn 编排器、Fake
+Adapter 和 100 Turn 全 Fake 垂直闭环已在测试中运行。目前仍没有可用的固件或
+服务端 Release；详见[实现状态](docs/roadmap/implementation-status.md)。
 
 ## 总体结构
 
@@ -47,7 +48,9 @@ ESP32-S3                         云端                     OpenClaw 所在电�
 - 流式回答、取消、屏幕状态和实体键权限确认
 - 签名 OTA、回滚、Fake 组件、协议一致性测试和 SBOM
 
-详细路线见[中文实施计划](docs/roadmap/implementation-plan.zh-CN.md)。
+详细路线见[详细技术设计](docs/design/detailed-design.zh-CN.md)、
+[阶段计划](docs/roadmap/implementation-plan.md)和
+[任务级执行计划](docs/roadmap/execution-plan.zh-CN.md)。
 
 ## 设计原则
 
@@ -59,7 +62,7 @@ ESP32-S3                         云端                     OpenClaw 所在电�
 6. 永久提供不依赖 ESP-SR 的按键说话构建。
 7. 本项目是独立实现，不是 cc-connect 的 fork 或兼容实现。
 
-## 横向扩展目录
+## 可替换实现目录
 
 ```text
 devices/
@@ -73,6 +76,10 @@ apps/connector/src/adapters/agents/
 更换设备时增加新的 `devices/<platform>` 实现；更换 Agent 时增加新的
 `agents/<agent>` 适配器。系统不做多 Agent 路由，一个 Connector 同时只运行
 一个 AgentRuntime。
+
+这里指的是设备和 Agent 实现可替换，不是 Relay 多实例横向扩容。v1
+明确使用单节点 Relay 和内存 Turn 状态；Relay 重启可以使当前 Turn
+失败，设备和 Connector 重连后从下一轮恢复。
 
 ## 开源许可
 

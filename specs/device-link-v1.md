@@ -14,9 +14,13 @@ The device opens one authenticated WSS connection. A device credential is sent
 in the HTTP `Authorization` header, never in the URL. TLS certificate validation
 and SNI are mandatory.
 
-The device sends `device.hello` with protocol and capability information. Relay
-responds with `device.welcome` or closes with a stable authentication/version
-error.
+The device sends `device.hello` with its protocol version, physical-approval
+support, and optional diagnostics. Relay responds with `device.welcome` or
+closes with a stable authentication/version error.
+
+The initial `device.hello` uses `seq = 0` and omits `connectionId`. Relay assigns
+`connectionId` in `device.welcome`; every later message must carry it and use a
+strictly increasing connection-local control sequence.
 
 v1 allows one active turn and one active audio stream per connection.
 
@@ -39,38 +43,39 @@ domain routing keys.
 }
 ```
 
-Required base fields are `v`, `type`, `connectionId`, `seq`, and `payload`.
-Turn messages additionally require `conversationId` and `turnId`.
+Required base fields are `v`, `type`, `seq`, and `payload`. `connectionId` is
+required after the hello/welcome exchange. Turn messages additionally require
+`conversationId` and `turnId`.
 
 Unknown optional fields are ignored. Unknown message types, invalid required
 fields, and unsupported major versions are rejected.
 
 ## Device to Relay messages
 
-| Type | Purpose |
-|---|---|
-| `device.hello` | Negotiate protocol, audio, display, button, and wake capabilities |
-| `turn.start` | Start one voice turn |
-| `turn.input_end` | No more microphone audio will be sent |
-| `turn.cancel` | Cancel capture, agent work, TTS, and playback |
-| `permission.resolve` | Resolve a currently valid physical approval request |
-| `pong` | Heartbeat response |
+| Type                 | Purpose                                                                     |
+| -------------------- | --------------------------------------------------------------------------- |
+| `device.hello`       | Validate the protocol and report physical-approval support plus diagnostics |
+| `turn.start`         | Start one voice turn                                                        |
+| `turn.input_end`     | No more microphone audio will be sent                                       |
+| `turn.cancel`        | Cancel capture, agent work, TTS, and playback                               |
+| `permission.resolve` | Resolve a currently valid physical approval request                         |
+| `pong`               | Heartbeat response                                                          |
 
 ## Relay to Device messages
 
-| Type | Purpose |
-|---|---|
-| `device.welcome` | Accept negotiation and report Connector status |
-| `turn.accepted` | Relay accepted the turn |
-| `turn.state` | Stable state for UI presentation |
-| `transcript.partial` | Optional ASR preview |
-| `transcript.final` | Final user transcript |
-| `audio.start` | Declare output format and begin playback stream |
-| `audio.end` | End playback stream |
-| `permission.request` | Request a physical allow/deny decision |
-| `turn.done` | Terminal successful or cancelled result |
-| `turn.error` | Terminal stable error |
-| `ping` | Heartbeat request |
+| Type                 | Purpose                                         |
+| -------------------- | ----------------------------------------------- |
+| `device.welcome`     | Accept negotiation and report Connector status  |
+| `turn.accepted`      | Relay accepted the turn                         |
+| `turn.state`         | Stable state for UI presentation                |
+| `transcript.partial` | Optional ASR preview                            |
+| `transcript.final`   | Final user transcript                           |
+| `audio.start`        | Declare output format and begin playback stream |
+| `audio.end`          | End playback stream                             |
+| `permission.request` | Request a physical allow/deny decision          |
+| `turn.done`          | Terminal successful or cancelled result         |
+| `turn.error`         | Terminal stable error                           |
+| `ping`               | Heartbeat request                               |
 
 ## Audio formats
 
@@ -79,29 +84,27 @@ v1 baseline:
 - input: signed PCM16 little-endian, 16 kHz, mono, 20 ms per payload
 - output: signed PCM16 little-endian, 24 kHz, mono
 
-Opus and alternative rates require a future negotiated capability and are not
-part of the v1 baseline.
+Opus and alternative rates require a future protocol revision and are not part
+of the v1 contract.
 
-## Device capabilities
+## Device hello payload
 
-`device.hello` describes supported input/output formats and optional features.
-The P1 schema must represent at least:
+v1 does not negotiate a device capability or audio-format matrix. Every
+conforming device supports the baseline input and output formats above.
+`device.hello` has one behavior field that changes a Relay decision:
 
 ```text
-audio.input.formats
-audio.output.formats
-features.wakeWord
-features.vad
-features.display
-features.buttons
-features.permissionApproval
-features.ota
-features.bargeIn
+physicalApproval: true | false
+diagnostics?: platform / board / softwareVersion / buildProfile
 ```
 
-Relay selects only mutually supported behavior. Missing display, wake, approval,
-or output capability must produce explicit degradation rather than platform-name
-checks in the turn orchestrator.
+Without physical approval, permission requests are denied. Diagnostics are
+optional and never affect routing or turn behavior.
+
+Wake detection, VAD, display, buttons, OTA, and the push-to-talk/WakeNet build
+profile are local implementation details. Both input profiles produce the same
+`turn.start` → audio → `turn.input_end` wire behavior. v1 is half-duplex and has
+no barge-in capability. Relay must not branch on diagnostics.
 
 ## Binary audio header
 
@@ -139,9 +142,6 @@ invalid_message
 invalid_state
 busy
 connector_offline
-speech_unavailable
-agent_unavailable
-approval_required
 timeout
 cancelled
 backpressure

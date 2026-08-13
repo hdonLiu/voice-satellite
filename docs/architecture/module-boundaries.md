@@ -30,11 +30,11 @@ Forbidden dependencies:
 ## Relay modules
 
 ```text
-DeviceGateway ─┐
-StreamingASR ──┤
-AgentPort ─────┼──> TurnOrchestrator ──> TurnRegistry
-StreamingTTS ──┤
-DeviceOutput ──┘
+DeviceGateway ─────┐
+StreamingAsrPort ──┤
+AgentPort ─────────┼──> TurnOrchestrator ──> TurnRegistry
+StreamingTtsPort ──┤
+DeviceOutputPort ───┘
 ```
 
 Stable ports:
@@ -43,7 +43,10 @@ Stable ports:
 - `StreamingTtsPort`
 - `AgentPort`
 - `DeviceOutputPort`
-- `TurnRepository`
+
+`AgentPort` is the only application boundary from Relay to Connector. Its v1
+WSS adapter speaks Connector Link. `TurnRegistry` is an in-memory application
+component, not a persistence port.
 
 Forbidden dependencies:
 
@@ -55,8 +58,9 @@ Forbidden dependencies:
 ## Connector modules
 
 ```text
-RelayClient -> ConnectorCoordinator -> AgentBackend -> AgentConversation
-                                                   -> configured Agent adapter
+RelayClientPort -> ConnectorCoordinator -> AgentRuntimePort
+                                           -> AgentConversation
+                                           -> configured Agent adapter
 ```
 
 Stable ports:
@@ -104,5 +108,9 @@ board adapters below them. Agent adapters are separated under
 
 Agent adapters are deployment-time alternatives. One Connector activates
 exactly one adapter, and Connector Link contains no `agentId`, alias, backend
-selector, or multi-agent routing. Capability enums handle differences between
-agent runtimes and device implementations without large marker-interface trees.
+selector, or multi-agent routing. A replacement implementation must satisfy the
+v1 contract instead of relying on a general capability/degradation matrix.
+
+This extension policy means replaceable implementations, not horizontal Relay
+scaling. v1 has one Relay process and reconstructs service at the next turn
+after a restart; it does not coordinate active turns across Relay instances.
