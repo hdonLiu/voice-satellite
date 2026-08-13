@@ -1,0 +1,51 @@
+menu "Voice Satellite"
+
+choice VS_INPUT_PROFILE
+    prompt "Input profile"
+    default VS_PROFILE_PTT
+    config VS_PROFILE_PTT
+        bool "Push to talk"
+    config VS_PROFILE_WAKENET
+        bool "WakeNet local wake word and energy endpointing"
+endchoice
+
+config VS_WIFI_SSID
+    string "Wi-Fi SSID fallback"
+    default ""
+
+config VS_WIFI_PASSWORD
+    string "Wi-Fi password fallback"
+    default ""
+
+config VS_RELAY_URL
+    string "Relay Device Link URL fallback"
+    default "wss://relay.example.invalid/v1/device"
+
+config VS_DEVICE_TOKEN
+    string "Device bearer token fallback"
+    default ""
+
+config VS_ALLOW_INSECURE_WS
+    bool "Allow ws:// for local development"
+    default n
+
+config VS_PHYSICAL_APPROVAL
+    bool "Use BOOT key for physical approval"
+    default y
+
+config VS_OUTPUT_VOLUME
+    int "Speaker output volume"
+    range 0 100
+    default 70
+
+config VS_MAX_CAPTURE_MS
+    int "Maximum capture duration in milliseconds"
+    range 1000 30000
+    default 15000
+
+config VS_WAKE_SILENCE_MS
+    int "WakeNet capture silence endpoint in milliseconds"
+    range 300 3000
+    default 900
+
+endmenu

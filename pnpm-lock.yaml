@@ -9,6 +9,9 @@ catalogs:
     '@sinclair/typebox':
       specifier: 0.34.52
       version: 0.34.52
+    ws:
+      specifier: 8.21.3
+      version: 8.21.3
 
 importers:
 
@@ -17,6 +20,9 @@ importers:
       '@types/node':
         specifier: 26.2.0
         version: 26.2.0
+      '@types/ws':
+        specifier: 8.18.1
+        version: 8.18.1
       markdownlint-cli2:
         specifier: 0.18.1
         version: 0.18.1
@@ -32,15 +38,24 @@ importers:
 
   apps/connector:
     dependencies:
+      '@agentclientprotocol/sdk':
+        specifier: 1.3.0
+        version: 1.3.0(zod@4.4.3)
       '@voice-satellite/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      ws:
+        specifier: 'catalog:'
+        version: 8.21.3
 
   apps/relay:
     dependencies:
       '@voice-satellite/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
+      ws:
+        specifier: 'catalog:'
+        version: 8.21.3
 
   packages/contracts:
     dependencies:
@@ -59,8 +74,16 @@ importers:
       '@voice-satellite/relay':
         specifier: workspace:*
         version: link:../../apps/relay
+      ws:
+        specifier: 'catalog:'
+        version: 8.21.3
 
 packages:
+
+  '@agentclientprotocol/sdk@1.3.0':
+    resolution: {integrity: sha512-i3h/efaeuMUFAO1HSfo97QZQnnvMd7wWBYtBsdL6UMZg3a78sk3Ffya5Xu7C7tYsXomXoDXJBAzQF2PcFKAhIQ==}
+    peerDependencies:
+      zod: ^3.25.0 || ^4.0.0
 
   '@jridgewell/sourcemap-codec@1.5.5':
     resolution: {integrity: sha512-cYQ9310grqxueWbl+WuIUIaiUaDcj7WOq5fVhEljNVgRfOUhY9fy2zTvfoqWsnebh8Sl70VScFbICvJnLKB0Og==}
@@ -206,6 +229,9 @@ packages:
 
   '@types/unist@2.0.11':
     resolution: {integrity: sha512-CmBKiL6NNo/OqgmMn95Fk9Whlp2mtvIv+KNpQKN2F4SjvrEesubTRWGYSg+BnWZOnlCaSTU1sMpsBOzgbYhnsA==}
+
+  '@types/ws@8.18.1':
+    resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
 
   '@typescript/typescript-aix-ppc64@7.0.2':
     resolution: {integrity: sha512-MTKKkWB7p/0E9xi1d1tHtZ5PiLkGEMIq88pK2CubZjOsLtYTLqhgIgi6zepFa+9GHZ6h05NMCkQxGKiPXMxXtQ==}
@@ -881,7 +907,26 @@ packages:
     engines: {node: '>=8'}
     hasBin: true
 
+  ws@8.21.3:
+    resolution: {integrity: sha512-201TZ/kPWxoPr/OKWjquZR1SWKXcvxdH+e1xrx89b3YbmzLMFCLfnaG1HFIgWzJOEWZ7MvpK++odZufgYR50Rw==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
+        optional: true
+
+  zod@4.4.3:
+    resolution: {integrity: sha512-ytENFjIJFl2UwYglde2jchW2Hwm4GJFLDiSXWdTrJQBIN9Fcyp7n4DhxJEiWNAJMV1/BqWfW/kkg71UDcHJyTQ==}
+
 snapshots:
+
+  '@agentclientprotocol/sdk@1.3.0(zod@4.4.3)':
+    dependencies:
+      zod: 4.4.3
 
   '@jridgewell/sourcemap-codec@1.5.5': {}
 
@@ -971,6 +1016,10 @@ snapshots:
       undici-types: 8.3.0
 
   '@types/unist@2.0.11': {}
+
+  '@types/ws@8.18.1':
+    dependencies:
+      '@types/node': 26.2.0
 
   '@typescript/typescript-aix-ppc64@7.0.2':
     optional: true
@@ -1622,3 +1671,7 @@ snapshots:
     dependencies:
       siginfo: 2.0.0
       stackback: 0.0.2
+
+  ws@8.21.3: {}
+
+  zod@4.4.3: {}

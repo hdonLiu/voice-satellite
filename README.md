@@ -16,10 +16,13 @@ so the OpenClaw Gateway and its credentials never need to be exposed publicly.
 
 ## Status
 
-Core implementation has started. The contracts, Relay/Connector application
-ports, bounded turn orchestrator, fake adapters, and a 100-turn all-Fake vertical
-slice are running in CI. There is no usable firmware or server release yet; see
-the [implementation status](docs/roadmap/implementation-status.md).
+The complete v1 reference path is implemented: strict Device/Connector links,
+single-node Relay, OpenAI speech adapters, outbound Connector, OpenClaw ACP
+runtime, and ESP-IDF firmware for ATK-DNESP32S3. Automated tests cover schema
+validation, binary audio, bounded queues, 100 turns, provider adapters, fake ACP,
+and a real WebSocket device-to-agent-to-device loop. Hardware smoke testing and
+deployment are still required before a release; see the
+[implementation status](docs/roadmap/implementation-status.md).
 
 ## Architecture
 
@@ -52,7 +55,7 @@ See [Architecture Overview](docs/architecture/overview.md) and
 [Module Boundaries](docs/architecture/module-boundaries.md). The implementation
 contracts are in the [Detailed Design](docs/design/detailed-design.zh-CN.md).
 
-## Planned v1 scope
+## v1 reference scope
 
 - ATK-DNESP32S3 with ES8388 audio codec
 - ESP-IDF firmware with push-to-talk and optional ESP-SR WakeNet/VAD profiles
@@ -60,7 +63,6 @@ contracts are in the [Detailed Design](docs/design/detailed-design.zh-CN.md).
 - Single-node TypeScript Relay with pluggable streaming ASR and TTS providers
 - TypeScript Connector using `openclaw acp` over local stdio
 - Streaming text-to-speech, cancellation, status display, and physical approval
-- Signed firmware OTA with rollback
 - Protocol fixtures, fake components, conformance tests, SBOMs, and signed releases
 
 See the [Implementation Plan](docs/roadmap/implementation-plan.md) and the
@@ -102,8 +104,8 @@ docs/                   Architecture, ADRs, roadmap, security, and licensing
 
 ## Contributing
 
-The implementation has not started. Contributions to architecture, protocol
-fixtures, hardware validation, and threat analysis are welcome. Read
+Contributions to adapters, protocol fixtures, hardware validation, and threat
+analysis are welcome. Read
 [CONTRIBUTING.md](CONTRIBUTING.md) before submitting changes.
 
 ## License

@@ -23,3 +23,25 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
+
+  firmware:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    container: espressif/idf:v5.5.2
+    strategy:
+      fail-fast: false
+      matrix:
+        profile: [ptt, wakenet]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build ESP32-S3 firmware
+        working-directory: devices/esp32
+        shell: bash
+        run: |
+          if [[ "${{ matrix.profile }}" == "wakenet" ]]; then
+            idf.py -DVS_FIRMWARE_PROFILE=wakenet \
+              -D'SDKCONFIG_DEFAULTS=sdkconfig.defaults;profiles/wakenet/sdkconfig.defaults' \
+              build
+          else
+            idf.py build
+          fi

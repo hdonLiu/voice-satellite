@@ -39,6 +39,7 @@ any other field that lets Relay select an agent.
   "type": "agent.run",
   "connectionId": "opaque-connection-id",
   "seq": 18,
+  "deviceId": "opaque-device-id",
   "conversationId": "opaque-conversation-id",
   "turnId": "opaque-turn-id",
   "requestId": "opaque-request-id",
@@ -53,13 +54,13 @@ Wire DTOs are validated at adapter boundaries and converted into domain types.
 
 ## Relay to Connector
 
-| Type                 | Purpose                                                          |
-| -------------------- | ---------------------------------------------------------------- |
-| `connector.welcome`  | Accept negotiation and assign the connection identity            |
-| `agent.run`          | Run one final transcript against the locally bound agent session |
-| `agent.cancel`       | Cancel the active request                                        |
-| `permission.resolve` | Resolve a still-valid permission request                         |
-| `ping`               | Heartbeat                                                        |
+| Type                       | Purpose                                                          |
+| -------------------------- | ---------------------------------------------------------------- |
+| `connector.welcome`        | Accept negotiation and assign the connection identity            |
+| `agent.run`                | Run one final transcript against the locally bound agent session |
+| `agent.cancel`             | Cancel the active request                                        |
+| `agent.permission_resolve` | Resolve a still-valid permission request                         |
+| `ping`                     | Heartbeat                                                        |
 
 ## Connector to Relay
 

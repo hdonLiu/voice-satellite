@@ -5,5 +5,7 @@ packages:
 catalog:
   "@sinclair/typebox": 0.34.52
   "@types/node": 26.2.0
+  "@types/ws": 8.18.1
   typescript: 7.0.2
   vitest: 4.1.10
+  ws: 8.21.3

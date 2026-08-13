@@ -47,8 +47,8 @@ Required base fields are `v`, `type`, `seq`, and `payload`. `connectionId` is
 required after the hello/welcome exchange. Turn messages additionally require
 `conversationId` and `turnId`.
 
-Unknown optional fields are ignored. Unknown message types, invalid required
-fields, and unsupported major versions are rejected.
+Unknown fields, unknown message types, invalid required fields, and unsupported
+major versions are rejected.
 
 ## Device to Relay messages
 
@@ -68,7 +68,6 @@ fields, and unsupported major versions are rejected.
 | `device.welcome`     | Accept negotiation and report Connector status  |
 | `turn.accepted`      | Relay accepted the turn                         |
 | `turn.state`         | Stable state for UI presentation                |
-| `transcript.partial` | Optional ASR preview                            |
 | `transcript.final`   | Final user transcript                           |
 | `audio.start`        | Declare output format and begin playback stream |
 | `audio.end`          | End playback stream                             |
@@ -108,16 +107,21 @@ no barge-in capability. Relay must not branch on diagnostics.
 
 ## Binary audio header
 
-The exact byte layout is frozen after the P0 hardware and provider spikes. It
-must include:
+All integers use network byte order. The fixed header is 40 bytes:
 
-- protocol version
-- direction
-- audio stream identifier
-- monotonic audio sequence
-- sender timestamp
-- flags
-- payload length
+| Offset | Size | Field                                      |
+| -----: | ---: | ------------------------------------------ |
+|      0 |    4 | ASCII magic `VSA1`                         |
+|      4 |    1 | protocol version `1`                       |
+|      5 |    1 | direction: `0` input, `1` output           |
+|      6 |    2 | flags/reserved, must be zero               |
+|      8 |    4 | monotonic `uint32` audio sequence          |
+|     12 |    8 | sender timestamp in milliseconds, `uint64` |
+|     20 |   16 | UUID bytes for `audioStreamId`             |
+|     36 |    4 | payload length, maximum 64 KiB             |
+
+The payload immediately follows the header. Its byte count must exactly equal
+the declared length; trailing and truncated frames are rejected.
 
 Because WSS/TCP is ordered and reliable, audio is not acknowledged or replayed
 at application level. Sequence numbers detect gaps and aid diagnostics.
@@ -125,7 +129,8 @@ at application level. Sequence numbers detect gaps and aid diagnostics.
 ## Turn rules
 
 - `turn.start` is invalid while another turn is active.
-- audio is valid only after `turn.accepted` and before `turn.input_end`.
+- audio may immediately follow `turn.start`; Relay establishes the active Turn
+  before it emits `turn.accepted`. Audio is invalid after `turn.input_end`.
 - disconnect cancels the current turn.
 - a cancelled or terminal turn ignores late audio and control events.
 - reconnection creates a new connection and never resumes an old audio stream.

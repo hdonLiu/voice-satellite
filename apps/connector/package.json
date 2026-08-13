@@ -8,10 +8,14 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "doctor": "node dist/main.js --doctor",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run"
   },
   "dependencies": {
-    "@voice-satellite/contracts": "workspace:*"
+    "@agentclientprotocol/sdk": "1.3.0",
+    "@voice-satellite/contracts": "workspace:*",
+    "ws": "catalog:"
   }
 }

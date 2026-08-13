@@ -3,3 +3,7 @@ export * from "./application/request-dedupe-cache.js";
 export * from "./application/single-runtime-host.js";
 export * from "./ports/agent-runtime.js";
 export * from "./ports/session-binding-store.js";
+export * from "./adapters/agents/openclaw/openclaw-acp-runtime.js";
+export * from "./infrastructure/json-file-session-store.js";
+export * from "./transport/ws-relay-client.js";
+export * from "./doctor.js";

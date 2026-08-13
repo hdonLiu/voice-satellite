@@ -1,7 +1,7 @@
 # Implementation status
 
 - Updated: 2026-08-13
-- Stage: provisional P1/P2 core implementation; P0 compatibility gates remain open
+- Stage: v1 implementation complete; deployment and hardware qualification pending
 
 This file records implemented behavior, not planned behavior. Task definitions
 and exit gates remain in the
@@ -9,35 +9,39 @@ and exit gates remain in the
 
 ## Implemented
 
-- pnpm workspace with pinned Node tooling, strict TypeScript, formatting,
-  Markdown checks, tests, builds, and GitHub Actions CI
-- branded public IDs, fixed PCM contracts, stable v1 errors, turn phases, and
-  TypeBox runtime validation for the first Device/Connector messages
-- minimal Device hello schema with `physicalApproval` as its only behavioral
-  field; platform, board, version, and build profile are diagnostics
-- Relay speech, agent, and device-output ports
-- in-memory `TurnRegistry`, idempotent terminal path, bounded async queue, and
-  monotonic sentence segmenter
-- streaming Turn orchestration from audio input through ASR, Agent, TTS, and
-  device output
-- Connector `AgentRuntimePort`, `SingleRuntimeHost`, session binding port,
-  bounded request dedupe, event projection, cancellation, and permission bridge
-- deterministic Fake ASR, TTS, AgentRuntime, session store, audio input, and
-  recording device output
-- all-Fake audio-to-audio tests, including 100 sequential turns, cancellation,
-  structured permission denial, and async-generator cleanup regression coverage
+- strict TypeScript workspace, pinned dependencies, formatting, docs checks,
+  build, tests, and CI
+- complete Device Link and Connector Link v1 runtime validators
+- frozen `VSA1` binary PCM audio header with TypeScript and ESP-IDF codecs
+- authenticated Device and Connector WebSocket ingress with separate tokens,
+  strict sequences, size limits, single Connector routing, and fail-closed input
+- in-memory, single-node Turn orchestration with bounded queues, cancellation,
+  deadlines, monotonic segmentation, and `execution_unknown` on accepted-request
+  disconnects
+- OpenAI buffered transcription adapter and streaming raw-PCM TTS adapter behind
+  replaceable speech ports
+- outbound-only Connector with reconnect, one `AgentRuntimePort`, bounded request
+  dedupe, and atomic `0600` session-binding storage
+- OpenClaw adapter using the official ACP TypeScript SDK and supervised
+  `openclaw acp` stdio, including session mapping, deltas, cancellation, filtered
+  status, physical permissions, bounded ACP lines, and child shutdown
+- ESP-IDF firmware organized behind a board port, with ATK-DNESP32S3 ES8388,
+  24-to-16 kHz capture conversion, bounded playback, PTT, optional WakeNet,
+  energy endpointing, NVS config, TLS verification, and physical approval
+- deterministic fake speech/agent/device components and tests covering 100 turns,
+  cancellation, permission denial, provider HTTP contracts, fake ACP, persistence,
+  and a real WebSocket audio-to-audio network loop
 
-## Not implemented yet
+## Pending outside implementation
 
-- Device Link and Connector Link WebSocket gateways and complete message schemas
-- durable Connector session-binding storage
-- OpenClaw ACP child-process adapter
-- real streaming ASR/TTS provider adapters
-- ESP-IDF firmware and ATK-DNESP32S3 board adapter
-- deployment images, credential provisioning, OTA, and production hardening
+- install an ESP-IDF toolchain and perform a clean firmware build in the target
+  deployment environment
+- flash and qualify the physical ATK board (codec gain, acoustic thresholds,
+  WakeNet model selection, long-run DMA and Wi-Fi stability)
+- provide actual domain/TLS termination, credentials, OpenAI account settings,
+  and service managers on the chosen hosts
+- perform real OpenClaw, ASR/TTS, latency, reconnect, and 50-turn acceptance runs
+- choose and implement the release/OTA signing and distribution policy
 
-No current artifact is a usable voice-device release.
-
-The implemented core is intentionally still allowed to change. Device/Connector
-wire schemas, audio framing, and real adapter contracts are not frozen until the
-P0 hardware, ACP, and speech-provider evidence is complete.
+No credentials or deployment decisions are committed to the repository. The
+firmware is never flashed automatically.

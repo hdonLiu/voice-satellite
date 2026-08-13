@@ -1,0 +1,14 @@
+#pragma once
+
+#include "driver/gpio.h"
+
+#define ATK_I2S_MCLK GPIO_NUM_3
+#define ATK_I2S_WS GPIO_NUM_9
+#define ATK_I2S_BCLK GPIO_NUM_46
+#define ATK_I2S_DIN GPIO_NUM_14
+#define ATK_I2S_DOUT GPIO_NUM_10
+#define ATK_I2C_SDA GPIO_NUM_41
+#define ATK_I2C_SCL GPIO_NUM_42
+#define ATK_ES8388_ADDR 0x10
+#define ATK_BOOT_BUTTON GPIO_NUM_0
+#define ATK_STATUS_LED GPIO_NUM_1

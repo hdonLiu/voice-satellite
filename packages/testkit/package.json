@@ -14,6 +14,7 @@
   "dependencies": {
     "@voice-satellite/connector": "workspace:*",
     "@voice-satellite/contracts": "workspace:*",
-    "@voice-satellite/relay": "workspace:*"
+    "@voice-satellite/relay": "workspace:*",
+    "ws": "catalog:"
   }
 }

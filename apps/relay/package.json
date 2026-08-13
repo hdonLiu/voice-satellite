@@ -8,10 +8,13 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/main.js",
+    "check-config": "node dist/main.js --check-config",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run"
   },
   "dependencies": {
-    "@voice-satellite/contracts": "workspace:*"
+    "@voice-satellite/contracts": "workspace:*",
+    "ws": "catalog:"
   }
 }
