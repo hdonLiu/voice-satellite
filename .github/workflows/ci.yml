@@ -24,6 +24,18 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm check
 
+  relay-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production Relay image
+        run: docker build --file deploy/relay/Dockerfile --tag voice-satellite-relay:ci .
+      - name: Validate Compose configuration
+        env:
+          VS_ENV_FILE: .env.example
+        run: docker compose --env-file deploy/.env.example --file deploy/compose.yaml config --quiet
+
   firmware:
     runs-on: ubuntu-latest
     timeout-minutes: 30

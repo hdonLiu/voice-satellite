@@ -1,0 +1,14 @@
+{
+	email {$ACME_EMAIL}
+	admin off
+}
+
+{$VS_DOMAIN} {
+	encode zstd gzip
+	reverse_proxy relay:8787
+
+	log {
+		output stdout
+		format json
+	}
+}

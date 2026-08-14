@@ -2,6 +2,10 @@ packages:
   - apps/*
   - packages/*
 
+injectWorkspacePackages: true
+syncInjectedDepsAfterScripts:
+  - build
+
 catalog:
   "@sinclair/typebox": 0.34.52
   "@types/node": 26.2.0
