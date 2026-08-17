@@ -8,11 +8,14 @@ if (process.argv.includes("--check-config")) {
   console.log("relay configuration is valid");
   process.exit(0);
 }
-const server = new RelayServer(
-  new OpenAiTranscriptionAsr(config.asr),
-  new OpenAiPcmTts(config.tts),
-  config.server,
-);
+const server =
+  config.mode === "device-link"
+    ? new RelayServer(undefined, undefined, config.server)
+    : new RelayServer(
+        new OpenAiTranscriptionAsr(config.asr),
+        new OpenAiPcmTts(config.tts),
+        config.server,
+      );
 const address = await server.start();
 console.log(
   `voice-satellite relay listening on ${address.host}:${address.port}`,

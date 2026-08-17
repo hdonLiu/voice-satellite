@@ -10,7 +10,9 @@ computer, which makes an outbound WSS connection to this Relay.
 - one Linux VPS with Docker Engine and the Compose plugin
 - public TCP ports 80 and 443, plus optional UDP 443 for HTTP/3
 - a DNS `A`/`AAAA` record pointing the chosen domain to that VPS
-- an OpenAI API key, or a compatible speech provider base URL and credentials
+
+The initial `device-link` deployment does not require a speech provider or a
+Connector. It validates authenticated WSS and bounded ESP32 audio upload only.
 
 ## Configure
 
@@ -21,16 +23,14 @@ cp deploy/.env.example deploy/.env
 chmod 600 deploy/.env
 ```
 
-Edit `deploy/.env`. Generate independent Device and Connector tokens instead of
-reusing a password:
+Edit `deploy/.env`. Generate a Device token instead of reusing a password:
 
 ```bash
 openssl rand -hex 32
-openssl rand -hex 32
 ```
 
-`VS_RELAY_DEVICE_TOKENS` is a JSON object. Keep the `link-probe` credential for
-pre-hardware tests, then add a separately generated ESP32 credential later.
+`VS_RELAY_DEVICE_TOKENS` is a JSON object. Replace `link-probe` with the ESP32
+device ID and its generated credential before building firmware.
 
 ## Start
 
@@ -45,9 +45,10 @@ Verify the public endpoint:
 curl --fail --show-error https://voice.example.com/healthz
 ```
 
-Before the Connector is online, `connectorReady` is `false`. It becomes `true`
-only after the outbound Connector has connected and its local AgentRuntime has
-successfully initialized.
+In `device-link` mode, `/healthz` reports `mode: "device-link"` and
+`connectorReady: false`. A completed device turn writes a structured
+`device_link_audio_received` log containing only frame, byte, and duration
+counts; raw audio is discarded and no transcript is produced.
 
 The two WSS endpoints are:
 
@@ -55,6 +56,9 @@ The two WSS endpoints are:
 wss://voice.example.com/v1/device
 wss://voice.example.com/v1/connector
 ```
+
+Only `/v1/device` is used in this milestone. The Connector endpoint rejects
+authentication until conversation mode is configured later.
 
 ## Operate
 

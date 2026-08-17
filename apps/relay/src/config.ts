@@ -1,21 +1,33 @@
 import {
   connectorCredential,
   deviceCredential,
+  type RelayMode,
   type RelayServerOptions,
 } from "./server/relay-server.js";
 import type { OpenAiAsrConfig } from "./adapters/speech/openai/openai-asr.js";
 import type { OpenAiTtsConfig } from "./adapters/speech/openai/openai-tts.js";
 
-export interface RelayConfig {
+interface BaseRelayConfig {
+  readonly mode: RelayMode;
   readonly server: RelayServerOptions;
+}
+
+export interface DeviceLinkRelayConfig extends BaseRelayConfig {
+  readonly mode: "device-link";
+}
+
+export interface ConversationRelayConfig extends BaseRelayConfig {
+  readonly mode: "conversation";
   readonly asr: OpenAiAsrConfig;
   readonly tts: OpenAiTtsConfig;
 }
 
+export type RelayConfig = DeviceLinkRelayConfig | ConversationRelayConfig;
+
 export function relayConfigFromEnv(
   env: NodeJS.ProcessEnv = process.env,
 ): RelayConfig {
-  const apiKey = required(env, "OPENAI_API_KEY");
+  const mode = relayMode(env.VS_RELAY_MODE);
   const rawDevices = JSON.parse(
     required(env, "VS_RELAY_DEVICE_TOKENS"),
   ) as unknown;
@@ -35,15 +47,23 @@ export function relayConfigFromEnv(
   });
   if (devices.length === 0)
     throw new Error("at least one device credential is required");
+  const server = {
+    host: env.VS_RELAY_HOST ?? "0.0.0.0",
+    port: integer(env.VS_RELAY_PORT, 8787),
+    mode,
+    deviceCredentials: devices,
+  };
+  if (mode === "device-link") return { mode, server };
+
+  const apiKey = required(env, "OPENAI_API_KEY");
   const common = {
     apiKey,
     ...(env.OPENAI_BASE_URL ? { baseUrl: env.OPENAI_BASE_URL } : {}),
   };
   return {
+    mode,
     server: {
-      host: env.VS_RELAY_HOST ?? "0.0.0.0",
-      port: integer(env.VS_RELAY_PORT, 8787),
-      deviceCredentials: devices,
+      ...server,
       connectorCredential: connectorCredential(
         env.VS_CONNECTOR_ID ?? "openclaw-primary",
         required(env, "VS_RELAY_CONNECTOR_TOKEN"),
@@ -65,6 +85,14 @@ export function relayConfigFromEnv(
         : {}),
     },
   };
+}
+
+function relayMode(value: string | undefined): RelayMode {
+  const mode = value ?? "conversation";
+  if (mode !== "device-link" && mode !== "conversation") {
+    throw new Error("VS_RELAY_MODE must be device-link or conversation");
+  }
+  return mode;
 }
 
 function required(env: NodeJS.ProcessEnv, key: string): string {

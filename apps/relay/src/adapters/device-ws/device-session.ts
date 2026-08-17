@@ -15,8 +15,10 @@ import {
   decodeAudioWireFrame,
   encodeAudioWireFrame,
   parseJsonSchema,
+  toStableError,
 } from "@voice-satellite/contracts";
 import type WebSocket from "ws";
+import { nextWithSignal } from "../../application/async.js";
 import { BoundedAsyncQueue } from "../../application/bounded-async-queue.js";
 import { TurnOrchestrator } from "../../application/turn-orchestrator.js";
 import type { TurnRegistry } from "../../application/turn-registry.js";
@@ -55,6 +57,7 @@ export interface DeviceSessionOptions {
   readonly permissionTimeoutMs?: number;
   readonly turnTimeoutMs?: number;
   readonly agentTimeoutMs?: number;
+  readonly linkOnly?: boolean;
 }
 
 export class DeviceSession implements DeviceOutputPort {
@@ -62,7 +65,9 @@ export class DeviceSession implements DeviceOutputPort {
   readonly #outgoing = new OutgoingSequence();
   readonly #audioQueueFrames: number;
   readonly #permissionTimeoutMs: number;
-  readonly #orchestrator: TurnOrchestrator;
+  readonly #turnTimeoutMs: number;
+  readonly #orchestrator: TurnOrchestrator | undefined;
+  readonly #linkOnly: boolean;
   #active: ActiveTurn | undefined;
   #closed = false;
 
@@ -73,17 +78,31 @@ export class DeviceSession implements DeviceOutputPort {
     private readonly conversationId: ConversationId,
     private readonly physicalApproval: boolean,
     registry: TurnRegistry,
-    asr: StreamingAsrPort,
+    asr: StreamingAsrPort | undefined,
     agent: AgentPort,
-    tts: StreamingTtsPort,
+    tts: StreamingTtsPort | undefined,
     options: DeviceSessionOptions = {},
   ) {
     this.#audioQueueFrames = options.audioQueueFrames ?? 250;
     this.#permissionTimeoutMs = options.permissionTimeoutMs ?? 20_000;
-    this.#orchestrator = new TurnOrchestrator(registry, asr, agent, tts, this, {
-      turnTimeoutMs: options.turnTimeoutMs ?? 120_000,
-      agentTimeoutMs: options.agentTimeoutMs ?? 60_000,
-    });
+    this.#turnTimeoutMs = options.turnTimeoutMs ?? 120_000;
+    this.#linkOnly = options.linkOnly ?? false;
+    if (!this.#linkOnly) {
+      if (!asr || !tts) {
+        throw new Error("conversation DeviceSession requires ASR and TTS");
+      }
+      this.#orchestrator = new TurnOrchestrator(
+        registry,
+        asr,
+        agent,
+        tts,
+        this,
+        {
+          turnTimeoutMs: this.#turnTimeoutMs,
+          agentTimeoutMs: options.agentTimeoutMs ?? 60_000,
+        },
+      );
+    }
   }
 
   public async welcome(connectorOnline: boolean): Promise<void> {
@@ -309,17 +328,77 @@ export class DeviceSession implements DeviceOutputPort {
     };
     this.#active = active;
     await this.#sendTurn("turn.accepted", turnId, {});
-    void this.#orchestrator
-      .run({
-        deviceId: this.deviceId,
-        conversationId: this.conversationId,
-        turnId,
-        audio: active.audio,
-        signal: active.abort.signal,
-      })
-      .finally(() => {
-        if (this.#active === active) this.#active = undefined;
-      });
+    const run = this.#linkOnly
+      ? this.#runLinkTurn(active)
+      : this.#orchestrator!.run({
+          deviceId: this.deviceId,
+          conversationId: this.conversationId,
+          turnId,
+          audio: active.audio,
+          signal: active.abort.signal,
+        });
+    void run.finally(() => {
+      if (this.#active === active) this.#active = undefined;
+    });
+  }
+
+  async #runLinkTurn(active: ActiveTurn): Promise<TurnResult> {
+    const timeout = AbortSignal.timeout(this.#turnTimeoutMs);
+    const signal = AbortSignal.any([active.abort.signal, timeout]);
+    const frames = active.audio[Symbol.asyncIterator]();
+    let frameCount = 0;
+    let bytes = 0;
+    let durationMs = 0;
+    try {
+      await this.state(active.turnId, "CAPTURING");
+      while (true) {
+        const next = await nextWithSignal(frames, signal);
+        if (next.done) break;
+        frameCount += 1;
+        bytes += next.value.data.byteLength;
+        durationMs = Math.max(durationMs, next.value.timestampMs + 20);
+      }
+      if (frameCount === 0) {
+        throw new VoiceSatelliteError(
+          "invalid_message",
+          "device link turn contained no audio",
+        );
+      }
+      console.info(
+        JSON.stringify({
+          event: "device_link_audio_received",
+          frames: frameCount,
+          bytes,
+          durationMs,
+        }),
+      );
+      const result: TurnResult = { status: "completed", transcript: "" };
+      await this.state(active.turnId, "COMPLETED");
+      await this.finish(active.turnId, result);
+      return result;
+    } catch (error) {
+      const stable = timeout.aborted
+        ? new VoiceSatelliteError("timeout", "device link turn timed out", {
+            cause: error,
+          })
+        : toStableError(error);
+      const result: TurnResult =
+        stable.code === "cancelled"
+          ? { status: "cancelled" }
+          : {
+              status: "failed",
+              code: stable.code,
+              message: stable.message,
+            };
+      await this.state(
+        active.turnId,
+        result.status === "cancelled" ? "CANCELLED" : "FAILED",
+      );
+      await this.finish(active.turnId, result);
+      return result;
+    } finally {
+      await frames.return?.();
+    }
   }
 
   #requireTurn(turnId: string): ActiveTurn {

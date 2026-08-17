@@ -376,6 +376,7 @@ static void process_control(const uint8_t *data, size_t size) {
         strlcpy(device.control.connection_id, connection, sizeof(device.control.connection_id));
         strlcpy(device.control.conversation_id, conversation, sizeof(device.control.conversation_id));
         device.control.next_outgoing_seq = 1;
+        ESP_LOGI(TAG, "relay connected");
         set_idle();
     } else if (!strcmp(type, "turn.state")) {
         const char *state = vs_json_string(payload, "state");
@@ -405,6 +406,7 @@ static void process_control(const uint8_t *data, size_t size) {
     } else if (!strcmp(type, "audio.end")) {
         device.output_stream_active = false;
     } else if (!strcmp(type, "turn.done")) {
+        ESP_LOGI(TAG, "turn completed");
         device.turn_terminal_received = true;
         if (vs_audio_playback_pending() == 0) set_idle();
     } else if (!strcmp(type, "turn.error")) {

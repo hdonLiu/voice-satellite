@@ -40,11 +40,14 @@ export interface RelayConnectorCredential {
   readonly token: string;
 }
 
+export type RelayMode = "device-link" | "conversation";
+
 export interface RelayServerOptions extends DeviceSessionOptions {
   readonly host?: string;
   readonly port?: number;
+  readonly mode?: RelayMode;
   readonly deviceCredentials: readonly RelayDeviceCredential[];
-  readonly connectorCredential: RelayConnectorCredential;
+  readonly connectorCredential?: RelayConnectorCredential;
   readonly handshakeTimeoutMs?: number;
 }
 
@@ -64,15 +67,27 @@ export class RelayServer {
   readonly #devices = new Set<DeviceSession>();
 
   public constructor(
-    private readonly asr: StreamingAsrPort,
-    private readonly tts: StreamingTtsPort,
+    private readonly asr: StreamingAsrPort | undefined,
+    private readonly tts: StreamingTtsPort | undefined,
     private readonly options: RelayServerOptions,
   ) {
+    if ((options.mode ?? "conversation") === "conversation") {
+      if (!asr || !tts) {
+        throw new Error("conversation mode requires ASR and TTS providers");
+      }
+      if (!options.connectorCredential) {
+        throw new Error("conversation mode requires a Connector credential");
+      }
+    }
     this.#http = createServer((request, response) => {
       if (request.url === "/healthz") {
         response.writeHead(200, { "content-type": "application/json" });
         response.end(
-          JSON.stringify({ ok: true, connectorReady: this.#agent.ready }),
+          JSON.stringify({
+            ok: true,
+            mode: this.options.mode ?? "conversation",
+            connectorReady: this.#agent.ready,
+          }),
         );
         return;
       }
@@ -143,6 +158,7 @@ export class RelayServer {
   }
 
   #authenticateConnector(request: IncomingMessage): ConnectorId | undefined {
+    if (!this.options.connectorCredential) return undefined;
     return safeTokenEqual(
       readBearer(request.headers.authorization),
       this.options.connectorCredential.token,
@@ -171,7 +187,10 @@ export class RelayServer {
           this.asr,
           this.#agent,
           this.tts,
-          this.options,
+          {
+            ...this.options,
+            linkOnly: (this.options.mode ?? "conversation") === "device-link",
+          },
         );
         this.#devices.add(session);
         socket.once("close", () => this.#devices.delete(session));
