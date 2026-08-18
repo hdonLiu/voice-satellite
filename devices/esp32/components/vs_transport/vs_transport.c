@@ -80,6 +80,9 @@ static void websocket_handler(void *args, esp_event_base_t base, int32_t id, voi
         case WEBSOCKET_EVENT_ERROR:
             projected.type = VS_TRANSPORT_ERROR; break;
         case WEBSOCKET_EVENT_DATA:
+            // The client handles WebSocket ping/pong control frames itself.
+            // Only application text and binary frames belong to Device Link.
+            if (event->op_code != 0x1 && event->op_code != 0x2) return;
             if (event->payload_offset != 0 || event->payload_len != event->data_len) {
                 ESP_LOGE(TAG, "fragmented WebSocket message rejected");
                 projected.type = VS_TRANSPORT_ERROR;
