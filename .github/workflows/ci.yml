@@ -58,3 +58,16 @@ jobs:
           else
             idf.py build
           fi
+      - name: Merge flashable firmware image
+        working-directory: devices/esp32
+        shell: bash
+        run: |
+          source /opt/esp/idf/export.sh
+          idf.py merge-bin -o "build/voice-satellite-${{ matrix.profile }}.bin"
+      - name: Upload flashable firmware
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ matrix.profile }}
+          path: devices/esp32/build/voice-satellite-${{ matrix.profile }}.bin
+          if-no-files-found: error
+          retention-days: 7

@@ -1,5 +1,6 @@
 import { OpenAiTranscriptionAsr } from "./adapters/speech/openai/openai-asr.js";
 import { OpenAiPcmTts } from "./adapters/speech/openai/openai-tts.js";
+import { ConsoleTranscriptSink } from "./adapters/transcript/console-transcript-sink.js";
 import { relayConfigFromEnv } from "./config.js";
 import { RelayServer } from "./server/relay-server.js";
 
@@ -8,14 +9,23 @@ if (process.argv.includes("--check-config")) {
   console.log("relay configuration is valid");
   process.exit(0);
 }
-const server =
-  config.mode === "device-link"
-    ? new RelayServer(undefined, undefined, config.server)
-    : new RelayServer(
-        new OpenAiTranscriptionAsr(config.asr),
-        new OpenAiPcmTts(config.tts),
-        config.server,
-      );
+let server: RelayServer;
+if (config.mode === "device-link") {
+  server = new RelayServer(undefined, undefined, config.server);
+} else if (config.mode === "transcribe") {
+  server = new RelayServer(
+    new OpenAiTranscriptionAsr(config.asr),
+    undefined,
+    config.server,
+    new ConsoleTranscriptSink(),
+  );
+} else {
+  server = new RelayServer(
+    new OpenAiTranscriptionAsr(config.asr),
+    new OpenAiPcmTts(config.tts),
+    config.server,
+  );
+}
 const address = await server.start();
 console.log(
   `voice-satellite relay listening on ${address.host}:${address.port}`,

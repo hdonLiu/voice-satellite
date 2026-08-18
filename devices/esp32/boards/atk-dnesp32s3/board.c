@@ -5,16 +5,23 @@
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
 #include "driver/i2s_std.h"
+#include "driver/spi_master.h"
 #include "esp_codec_dev.h"
 #include "esp_codec_dev_defaults.h"
 #include "esp_check.h"
+#include "esp_lcd_panel_io.h"
+#include "esp_lcd_panel_ops.h"
+#include "esp_lcd_panel_vendor.h"
 #include "esp_log.h"
+#include "esp_lvgl_port.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
+#include "lvgl.h"
 
 static const char *TAG = "vs_board_atk";
 static i2c_master_bus_handle_t i2c_bus;
+static i2c_master_dev_handle_t xl9555;
 static i2s_chan_handle_t tx_channel;
 static i2s_chan_handle_t rx_channel;
 static const audio_codec_data_if_t *data_if;
@@ -26,6 +33,147 @@ static esp_codec_dev_handle_t output_device;
 static QueueHandle_t button_queue;
 static vs_board_button_callback_t button_callback;
 static void *button_context;
+static lv_obj_t *display_state_label;
+static lv_obj_t *display_transcript_label;
+
+static esp_err_t xl9555_write(uint8_t reg, uint8_t value) {
+    const uint8_t data[] = {reg, value};
+    return i2c_master_transmit(xl9555, data, sizeof(data), 1000);
+}
+
+static esp_err_t xl9555_read(uint8_t reg, uint8_t *value) {
+    return i2c_master_transmit_receive(xl9555, &reg, 1, value, 1, 1000);
+}
+
+static esp_err_t xl9555_set_output(uint8_t bit, bool high) {
+    uint8_t reg = bit < 8 ? 0x02 : 0x03;
+    uint8_t shift = bit < 8 ? bit : bit - 8;
+    uint8_t value = 0;
+    ESP_RETURN_ON_ERROR(xl9555_read(reg, &value), TAG, "xl9555 read");
+    value = high ? (value | (1U << shift)) : (value & ~(1U << shift));
+    return xl9555_write(reg, value);
+}
+
+static esp_err_t initialize_xl9555(void) {
+    const i2c_device_config_t config = {
+        .dev_addr_length = I2C_ADDR_BIT_LEN_7,
+        .device_address = ATK_XL9555_ADDR,
+        .scl_speed_hz = 400000,
+    };
+    ESP_RETURN_ON_ERROR(i2c_master_bus_add_device(i2c_bus, &config, &xl9555), TAG,
+                        "xl9555 device");
+    ESP_RETURN_ON_ERROR(xl9555_write(0x06, 0x03), TAG, "xl9555 config 0");
+    return xl9555_write(0x07, 0xF0);
+}
+
+static void initialize_display_ui(void) {
+    lv_obj_t *screen = lv_screen_active();
+    lv_obj_set_style_bg_color(screen, lv_color_hex(0x101418), 0);
+    lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
+    lv_obj_set_style_text_font(screen, &lv_font_source_han_sans_sc_16_cjk, 0);
+
+    lv_obj_t *header = lv_obj_create(screen);
+    lv_obj_remove_style_all(header);
+    lv_obj_set_size(header, ATK_LCD_WIDTH, 42);
+    lv_obj_set_style_bg_color(header, lv_color_hex(0x1677FF), 0);
+    lv_obj_set_style_bg_opa(header, LV_OPA_COVER, 0);
+
+    display_state_label = lv_label_create(header);
+    lv_label_set_text(display_state_label, "Starting");
+    lv_obj_set_style_text_color(display_state_label, lv_color_white(), 0);
+    lv_obj_align(display_state_label, LV_ALIGN_LEFT_MID, 14, 0);
+
+    lv_obj_t *title = lv_label_create(screen);
+    lv_label_set_text(title, "识别结果");
+    lv_obj_set_style_text_color(title, lv_color_hex(0x8CA0B3), 0);
+    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 14, 56);
+
+    display_transcript_label = lv_label_create(screen);
+    lv_label_set_text(display_transcript_label, "等待语音输入");
+    lv_label_set_long_mode(display_transcript_label, LV_LABEL_LONG_WRAP);
+    lv_obj_set_width(display_transcript_label, ATK_LCD_WIDTH - 28);
+    lv_obj_set_style_text_color(display_transcript_label, lv_color_white(), 0);
+    lv_obj_set_style_text_line_space(display_transcript_label, 7, 0);
+    lv_obj_align(display_transcript_label, LV_ALIGN_TOP_LEFT, 14, 86);
+}
+
+static esp_err_t initialize_display(void) {
+    const spi_bus_config_t bus = {
+        .mosi_io_num = ATK_LCD_MOSI,
+        .miso_io_num = GPIO_NUM_NC,
+        .sclk_io_num = ATK_LCD_SCLK,
+        .quadwp_io_num = GPIO_NUM_NC,
+        .quadhd_io_num = GPIO_NUM_NC,
+        .max_transfer_sz = ATK_LCD_WIDTH * 20 * sizeof(uint16_t),
+    };
+    ESP_RETURN_ON_ERROR(spi_bus_initialize(SPI2_HOST, &bus, SPI_DMA_CH_AUTO), TAG,
+                        "lcd spi bus");
+
+    esp_lcd_panel_io_handle_t panel_io = NULL;
+    const esp_lcd_panel_io_spi_config_t io_config = {
+        .cs_gpio_num = ATK_LCD_CS,
+        .dc_gpio_num = ATK_LCD_DC,
+        .spi_mode = 0,
+        .pclk_hz = 20 * 1000 * 1000,
+        .trans_queue_depth = 7,
+        .lcd_cmd_bits = 8,
+        .lcd_param_bits = 8,
+    };
+    ESP_RETURN_ON_ERROR(esp_lcd_new_panel_io_spi(SPI2_HOST, &io_config, &panel_io), TAG,
+                        "lcd panel io");
+
+    esp_lcd_panel_handle_t panel = NULL;
+    const esp_lcd_panel_dev_config_t panel_config = {
+        .reset_gpio_num = GPIO_NUM_NC,
+        .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB,
+        .data_endian = LCD_RGB_DATA_ENDIAN_BIG,
+        .bits_per_pixel = 16,
+    };
+    ESP_RETURN_ON_ERROR(esp_lcd_new_panel_st7789(panel_io, &panel_config, &panel), TAG,
+                        "st7789 panel");
+    ESP_RETURN_ON_ERROR(esp_lcd_panel_reset(panel), TAG, "lcd reset");
+    ESP_RETURN_ON_ERROR(xl9555_set_output(ATK_XL9555_LCD_RESET, true), TAG,
+                        "lcd release reset");
+    ESP_RETURN_ON_ERROR(xl9555_set_output(ATK_XL9555_LCD_BACKLIGHT, false), TAG,
+                        "lcd backlight");
+    ESP_RETURN_ON_ERROR(esp_lcd_panel_init(panel), TAG, "lcd init");
+    ESP_RETURN_ON_ERROR(esp_lcd_panel_invert_color(panel, true), TAG, "lcd invert");
+    ESP_RETURN_ON_ERROR(esp_lcd_panel_swap_xy(panel, true), TAG, "lcd swap xy");
+    ESP_RETURN_ON_ERROR(esp_lcd_panel_mirror(panel, true, false), TAG, "lcd mirror");
+    esp_err_t display_on = esp_lcd_panel_disp_on_off(panel, true);
+    if (display_on != ESP_OK && display_on != ESP_ERR_NOT_SUPPORTED) return display_on;
+
+    lv_init();
+    lvgl_port_cfg_t port_config = ESP_LVGL_PORT_INIT_CONFIG();
+    port_config.task_priority = 1;
+    port_config.task_affinity = 1;
+    ESP_RETURN_ON_ERROR(lvgl_port_init(&port_config), TAG, "lvgl port");
+    const lvgl_port_display_cfg_t display_config = {
+        .io_handle = panel_io,
+        .panel_handle = panel,
+        .buffer_size = ATK_LCD_WIDTH * 20,
+        .double_buffer = false,
+        .hres = ATK_LCD_WIDTH,
+        .vres = ATK_LCD_HEIGHT,
+        .monochrome = false,
+        .rotation = {
+            .swap_xy = true,
+            .mirror_x = true,
+            .mirror_y = false,
+        },
+        .color_format = LV_COLOR_FORMAT_RGB565,
+        .flags = {
+            .buff_dma = true,
+            .swap_bytes = true,
+        },
+    };
+    if (!lvgl_port_add_disp(&display_config)) return ESP_FAIL;
+    if (!lvgl_port_lock(1000)) return ESP_ERR_TIMEOUT;
+    initialize_display_ui();
+    lvgl_port_unlock();
+    ESP_LOGI(TAG, "ATK-DNESP32S3 display ready");
+    return ESP_OK;
+}
 
 static void IRAM_ATTR button_isr(void *context) {
     (void)context;
@@ -181,6 +329,8 @@ esp_err_t vs_board_init(vs_board_button_callback_t callback, void *context) {
     ESP_ERROR_CHECK(gpio_isr_handler_add(ATK_BOOT_BUTTON, button_isr, NULL));
     xTaskCreate(button_task, "vs_button", 2048, NULL, 8, NULL);
     ESP_RETURN_ON_ERROR(initialize_i2c(), TAG, "i2c");
+    ESP_RETURN_ON_ERROR(initialize_xl9555(), TAG, "xl9555");
+    ESP_RETURN_ON_ERROR(initialize_display(), TAG, "display");
     ESP_RETURN_ON_ERROR(initialize_i2s(), TAG, "i2s");
     ESP_RETURN_ON_ERROR(initialize_codec(), TAG, "es8388");
     ESP_LOGI(TAG, "ATK-DNESP32S3 audio board ready");
@@ -201,4 +351,16 @@ esp_err_t vs_board_set_output(bool enabled) {
 
 void vs_board_set_status(bool active) {
     gpio_set_level(ATK_STATUS_LED, active ? 1 : 0);
+}
+
+void vs_board_display_set_state(const char *state) {
+    if (!display_state_label || !state || !lvgl_port_lock(100)) return;
+    lv_label_set_text(display_state_label, state);
+    lvgl_port_unlock();
+}
+
+void vs_board_display_set_transcript(const char *text) {
+    if (!display_transcript_label || !text || !lvgl_port_lock(100)) return;
+    lv_label_set_text(display_transcript_label, text);
+    lvgl_port_unlock();
 }

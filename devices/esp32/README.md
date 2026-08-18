@@ -13,7 +13,7 @@ components/vs_protocol Device Link JSON and VSA1 binary audio codec
 components/vs_storage/ Versioned NVS-owned configuration namespace
 components/vs_transport Wi-Fi, TLS verification, authenticated WebSocket
 components/vs_wake/    Optional ESP-SR WakeNet detector
-boards/atk-dnesp32s3/  ES8388, I2S, I2C, key, and status LED implementation
+boards/atk-dnesp32s3/  ES8388 audio and ST7789 display implementation
 ```
 
 The default `ptt` profile uses the BOOT key: hold to speak and release to end
@@ -22,6 +22,12 @@ pressing it causes Relay's approval deadline to deny it. Pressing BOOT during
 playback cancels the turn. The `wakenet` profile runs WakeNet only while idle and
 uses local energy endpointing after detection. Both profiles speak identical
 Device Link v1 messages.
+
+The 320x240 display shows link/turn state and the latest
+`transcript.final`. The built-in LVGL Source Han Sans SC font covers 1,338
+common CJK characters. Unsupported uncommon glyphs fall back to a missing-glyph
+marker; dynamic server-pushed glyphs are intentionally deferred until the
+speech path is proven.
 
 ## Configure and build
 
@@ -49,6 +55,23 @@ Set these under **Voice Satellite** before building:
 - `wss://.../v1/device` Relay URL
 - per-device bearer token
 - PTT or WakeNet input profile
+
+If Relay URL/token are absent at first boot, the device shows `Provisioning`
+and emits `VS_PROVISION_READY` on the 115200-baud console. Send exactly one JSON
+line:
+
+```json
+{
+  "relayUrl": "wss://relay.example/v1/device",
+  "deviceToken": "per-device-token"
+}
+```
+
+`wifiSsid` and `wifiPassword` are optional fields. When they are omitted, the
+firmware reuses credentials already stored by the ESP-IDF Wi-Fi driver, which
+allows a board previously connected by another ESP-IDF application to keep its
+network without exposing the password. Provisioning is accepted only while the
+required Relay configuration is missing and is then persisted in `vs_config`.
 
 For production provisioning, write the same fields into NVS namespace
 `vs_config` with keys `wifi_ssid`, `wifi_pass`, `relay_url`, and `device_token`.

@@ -19,6 +19,8 @@ esp_err_t vs_board_audio_read(int16_t *samples, size_t sample_count);
 esp_err_t vs_board_audio_write(const int16_t *samples, size_t sample_count);
 esp_err_t vs_board_set_output(bool enabled);
 void vs_board_set_status(bool active);
+void vs_board_display_set_state(const char *state);
+void vs_board_display_set_transcript(const char *text);
 
 #ifdef __cplusplus
 }

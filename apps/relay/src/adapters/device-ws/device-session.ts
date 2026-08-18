@@ -21,6 +21,7 @@ import type WebSocket from "ws";
 import { nextWithSignal } from "../../application/async.js";
 import { BoundedAsyncQueue } from "../../application/bounded-async-queue.js";
 import { TurnOrchestrator } from "../../application/turn-orchestrator.js";
+import { TranscriptionOrchestrator } from "../../application/transcription-orchestrator.js";
 import type { TurnRegistry } from "../../application/turn-registry.js";
 import {
   IncomingSequence,
@@ -33,6 +34,7 @@ import {
 import type { AgentPort } from "../../ports/agent.js";
 import type { DeviceOutputPort } from "../../ports/device-output.js";
 import type { StreamingAsrPort, StreamingTtsPort } from "../../ports/speech.js";
+import type { TranscriptSinkPort } from "../../ports/transcript-sink.js";
 
 interface Deferred<T> {
   readonly promise: Promise<T>;
@@ -57,7 +59,7 @@ export interface DeviceSessionOptions {
   readonly permissionTimeoutMs?: number;
   readonly turnTimeoutMs?: number;
   readonly agentTimeoutMs?: number;
-  readonly linkOnly?: boolean;
+  readonly mode?: "device-link" | "transcribe" | "conversation";
 }
 
 export class DeviceSession implements DeviceOutputPort {
@@ -67,7 +69,8 @@ export class DeviceSession implements DeviceOutputPort {
   readonly #permissionTimeoutMs: number;
   readonly #turnTimeoutMs: number;
   readonly #orchestrator: TurnOrchestrator | undefined;
-  readonly #linkOnly: boolean;
+  readonly #transcriber: TranscriptionOrchestrator | undefined;
+  readonly #mode: "device-link" | "transcribe" | "conversation";
   #active: ActiveTurn | undefined;
   #closed = false;
 
@@ -81,13 +84,14 @@ export class DeviceSession implements DeviceOutputPort {
     asr: StreamingAsrPort | undefined,
     agent: AgentPort,
     tts: StreamingTtsPort | undefined,
+    transcriptSink: TranscriptSinkPort | undefined,
     options: DeviceSessionOptions = {},
   ) {
     this.#audioQueueFrames = options.audioQueueFrames ?? 250;
     this.#permissionTimeoutMs = options.permissionTimeoutMs ?? 20_000;
     this.#turnTimeoutMs = options.turnTimeoutMs ?? 120_000;
-    this.#linkOnly = options.linkOnly ?? false;
-    if (!this.#linkOnly) {
+    this.#mode = options.mode ?? "conversation";
+    if (this.#mode === "conversation") {
       if (!asr || !tts) {
         throw new Error("conversation DeviceSession requires ASR and TTS");
       }
@@ -101,6 +105,19 @@ export class DeviceSession implements DeviceOutputPort {
           turnTimeoutMs: this.#turnTimeoutMs,
           agentTimeoutMs: options.agentTimeoutMs ?? 60_000,
         },
+      );
+    } else if (this.#mode === "transcribe") {
+      if (!asr || !transcriptSink) {
+        throw new Error(
+          "transcribe DeviceSession requires ASR and a transcript sink",
+        );
+      }
+      this.#transcriber = new TranscriptionOrchestrator(
+        registry,
+        asr,
+        this,
+        transcriptSink,
+        this.#turnTimeoutMs,
       );
     }
   }
@@ -328,15 +345,25 @@ export class DeviceSession implements DeviceOutputPort {
     };
     this.#active = active;
     await this.#sendTurn("turn.accepted", turnId, {});
-    const run = this.#linkOnly
-      ? this.#runLinkTurn(active)
-      : this.#orchestrator!.run({
-          deviceId: this.deviceId,
-          conversationId: this.conversationId,
-          turnId,
-          audio: active.audio,
-          signal: active.abort.signal,
-        });
+    const input = {
+      deviceId: this.deviceId,
+      conversationId: this.conversationId,
+      turnId,
+      audio: active.audio,
+      signal: active.abort.signal,
+    };
+    const run =
+      this.#mode === "device-link"
+        ? this.#runLinkTurn(active)
+        : this.#mode === "transcribe"
+          ? this.#transcriber!.run(input)
+          : this.#orchestrator!.run({
+              deviceId: this.deviceId,
+              conversationId: this.conversationId,
+              turnId,
+              audio: active.audio,
+              signal: active.abort.signal,
+            });
     void run.finally(() => {
       if (this.#active === active) this.#active = undefined;
     });

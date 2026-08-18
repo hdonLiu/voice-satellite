@@ -29,6 +29,7 @@ import {
   sendJson,
 } from "../infrastructure/link-utils.js";
 import type { StreamingAsrPort, StreamingTtsPort } from "../ports/speech.js";
+import type { TranscriptSinkPort } from "../ports/transcript-sink.js";
 
 export interface RelayDeviceCredential {
   readonly deviceId: DeviceId;
@@ -40,7 +41,7 @@ export interface RelayConnectorCredential {
   readonly token: string;
 }
 
-export type RelayMode = "device-link" | "conversation";
+export type RelayMode = "device-link" | "transcribe" | "conversation";
 
 export interface RelayServerOptions extends DeviceSessionOptions {
   readonly host?: string;
@@ -70,6 +71,7 @@ export class RelayServer {
     private readonly asr: StreamingAsrPort | undefined,
     private readonly tts: StreamingTtsPort | undefined,
     private readonly options: RelayServerOptions,
+    private readonly transcriptSink?: TranscriptSinkPort,
   ) {
     if ((options.mode ?? "conversation") === "conversation") {
       if (!asr || !tts) {
@@ -77,6 +79,10 @@ export class RelayServer {
       }
       if (!options.connectorCredential) {
         throw new Error("conversation mode requires a Connector credential");
+      }
+    } else if (options.mode === "transcribe") {
+      if (!asr || !transcriptSink) {
+        throw new Error("transcribe mode requires ASR and a transcript sink");
       }
     }
     this.#http = createServer((request, response) => {
@@ -187,9 +193,10 @@ export class RelayServer {
           this.asr,
           this.#agent,
           this.tts,
+          this.transcriptSink,
           {
             ...this.options,
-            linkOnly: (this.options.mode ?? "conversation") === "device-link",
+            mode: this.options.mode ?? "conversation",
           },
         );
         this.#devices.add(session);

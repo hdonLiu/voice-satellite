@@ -242,6 +242,7 @@ static void set_idle(void) {
     device.turn_terminal_received = false;
     vs_board_set_output(false);
     vs_board_set_status(false);
+    vs_board_display_set_state(device.state == DEVICE_IDLE ? "Ready" : "Offline");
 #if CONFIG_VS_PROFILE_WAKENET
     vs_wake_set_enabled(device.state == DEVICE_IDLE);
 #endif
@@ -278,6 +279,7 @@ static esp_err_t begin_capture(void) {
     vs_wake_set_enabled(false);
     vs_audio_set_capture(true);
     vs_board_set_status(true);
+    vs_board_display_set_state("Listening");
     esp_timer_stop(device.capture_timer);
     esp_timer_start_once(device.capture_timer, CONFIG_VS_MAX_CAPTURE_MS * 1000ULL);
     ESP_LOGI(TAG, "capture started, turn=%s", device.turn_id);
@@ -291,6 +293,7 @@ static void end_capture(void) {
     vs_audio_set_capture(false);
     esp_timer_stop(device.capture_timer);
     device.state = DEVICE_WAITING;
+    vs_board_display_set_state("Recognizing");
     outgoing_audio_t sentinel = {
         .end = true,
         .generation = atomic_load(&device.capture_generation),
@@ -380,7 +383,20 @@ static void process_control(const uint8_t *data, size_t size) {
         set_idle();
     } else if (!strcmp(type, "turn.state")) {
         const char *state = vs_json_string(payload, "state");
-        if (state && !strcmp(state, "SPEAKING")) device.state = DEVICE_SPEAKING;
+        if (state && !strcmp(state, "SPEAKING")) {
+            device.state = DEVICE_SPEAKING;
+            vs_board_display_set_state("Speaking");
+        } else if (state && !strcmp(state, "TRANSCRIBING")) {
+            vs_board_display_set_state("Recognizing");
+        } else if (state && !strcmp(state, "WAITING_AGENT")) {
+            vs_board_display_set_state("Forwarding");
+        }
+    } else if (!strcmp(type, "transcript.final")) {
+        const char *text = vs_json_string(payload, "text");
+        if (!text || !text[0]) goto invalid;
+        ESP_LOGI(TAG, "transcript: %s", text);
+        vs_board_display_set_transcript(text);
+        vs_board_display_set_state("Recognized");
     } else if (!strcmp(type, "permission.request")) {
         const char *request_id = vs_json_string(payload, "requestId");
         if (!request_id) goto invalid;
@@ -411,6 +427,7 @@ static void process_control(const uint8_t *data, size_t size) {
         if (vs_audio_playback_pending() == 0) set_idle();
     } else if (!strcmp(type, "turn.error")) {
         ESP_LOGW(TAG, "turn failed: %s", vs_json_string(payload, "code") ? vs_json_string(payload, "code") : "unknown");
+        vs_board_display_set_state("Error");
         vs_audio_stop_playback();
         set_idle();
     } else if (!strcmp(type, "ping")) {
@@ -486,11 +503,6 @@ esp_err_t vs_device_start(void) {
     device.capture_mutex = xSemaphoreCreateMutex();
     if (!device.events || !device.outgoing_audio || !device.capture_mutex) return ESP_ERR_NO_MEM;
     ESP_RETURN_ON_ERROR(vs_storage_init(), TAG, "storage init");
-    ESP_RETURN_ON_ERROR(vs_storage_load(&device.config), TAG, "config load");
-    if (!device.config.wifi_ssid[0] || !device.config.relay_url[0] || !device.config.device_token[0]) {
-        ESP_LOGE(TAG, "Wi-Fi, Relay URL, and device token must be configured");
-        return ESP_ERR_INVALID_STATE;
-    }
     const esp_timer_create_args_t timer_config = {
         .callback = capture_timeout,
         .name = "capture_limit",
@@ -498,6 +510,19 @@ esp_err_t vs_device_start(void) {
     };
     ESP_RETURN_ON_ERROR(esp_timer_create(&timer_config, &device.capture_timer), TAG, "timer");
     ESP_RETURN_ON_ERROR(vs_board_init(board_button, &device), TAG, "board");
+    ESP_RETURN_ON_ERROR(vs_storage_load(&device.config), TAG, "config load");
+    if (!vs_storage_is_provisioned(&device.config)) {
+        ESP_LOGW(TAG, "Relay configuration missing; waiting for one serial provisioning frame");
+        vs_board_display_set_state("Provisioning");
+        vs_board_display_set_transcript("等待串口安全配置");
+        ESP_RETURN_ON_ERROR(vs_storage_provision_serial(&device.config), TAG, "serial provisioning");
+    }
+    vs_board_display_set_state("Connecting");
+#if CONFIG_VS_PROFILE_WAKENET
+    vs_board_display_set_transcript("说出唤醒词后开始讲话");
+#else
+    vs_board_display_set_transcript("按住 BOOT 键说话");
+#endif
     ESP_RETURN_ON_ERROR(vs_wake_init(wake_detected, &device), TAG, "wake");
     ESP_RETURN_ON_ERROR(vs_audio_init(captured_audio, monitored_audio, playback_drained, &device), TAG, "audio");
     ESP_RETURN_ON_ERROR(vs_transport_wifi_connect(device.config.wifi_ssid,

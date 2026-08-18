@@ -17,6 +17,8 @@ typedef struct {
 esp_err_t vs_storage_init(void);
 esp_err_t vs_storage_load(vs_device_config_t *config);
 esp_err_t vs_storage_save(const vs_device_config_t *config);
+bool vs_storage_is_provisioned(const vs_device_config_t *config);
+esp_err_t vs_storage_provision_serial(vs_device_config_t *config);
 
 #ifdef __cplusplus
 }

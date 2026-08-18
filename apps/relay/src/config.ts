@@ -16,13 +16,19 @@ export interface DeviceLinkRelayConfig extends BaseRelayConfig {
   readonly mode: "device-link";
 }
 
+export interface TranscribeRelayConfig extends BaseRelayConfig {
+  readonly mode: "transcribe";
+  readonly asr: OpenAiAsrConfig;
+}
+
 export interface ConversationRelayConfig extends BaseRelayConfig {
   readonly mode: "conversation";
   readonly asr: OpenAiAsrConfig;
   readonly tts: OpenAiTtsConfig;
 }
 
-export type RelayConfig = DeviceLinkRelayConfig | ConversationRelayConfig;
+export type RelayConfig =
+  DeviceLinkRelayConfig | TranscribeRelayConfig | ConversationRelayConfig;
 
 export function relayConfigFromEnv(
   env: NodeJS.ProcessEnv = process.env,
@@ -60,6 +66,14 @@ export function relayConfigFromEnv(
     apiKey,
     ...(env.OPENAI_BASE_URL ? { baseUrl: env.OPENAI_BASE_URL } : {}),
   };
+  const asr = {
+    ...common,
+    model: env.OPENAI_TRANSCRIBE_MODEL ?? "gpt-4o-mini-transcribe",
+    ...(env.OPENAI_TRANSCRIBE_LANGUAGE
+      ? { language: env.OPENAI_TRANSCRIBE_LANGUAGE }
+      : {}),
+  };
+  if (mode === "transcribe") return { mode, server, asr };
   return {
     mode,
     server: {
@@ -69,13 +83,7 @@ export function relayConfigFromEnv(
         required(env, "VS_RELAY_CONNECTOR_TOKEN"),
       ),
     },
-    asr: {
-      ...common,
-      model: env.OPENAI_TRANSCRIBE_MODEL ?? "gpt-4o-mini-transcribe",
-      ...(env.OPENAI_TRANSCRIBE_LANGUAGE
-        ? { language: env.OPENAI_TRANSCRIBE_LANGUAGE }
-        : {}),
-    },
+    asr,
     tts: {
       ...common,
       model: env.OPENAI_TTS_MODEL ?? "gpt-4o-mini-tts",
@@ -89,8 +97,14 @@ export function relayConfigFromEnv(
 
 function relayMode(value: string | undefined): RelayMode {
   const mode = value ?? "conversation";
-  if (mode !== "device-link" && mode !== "conversation") {
-    throw new Error("VS_RELAY_MODE must be device-link or conversation");
+  if (
+    mode !== "device-link" &&
+    mode !== "transcribe" &&
+    mode !== "conversation"
+  ) {
+    throw new Error(
+      "VS_RELAY_MODE must be device-link, transcribe, or conversation",
+    );
   }
   return mode;
 }

@@ -12,7 +12,9 @@ computer, which makes an outbound WSS connection to this Relay.
 - normally, a DNS `A`/`AAAA` record pointing the chosen domain to that VPS
 
 The initial `device-link` deployment does not require a speech provider or a
-Connector. It validates authenticated WSS and bounded ESP32 audio upload only.
+Connector. The next `transcribe` milestone requires ASR but still does not need
+a Connector or TTS: it returns recognized text to the ESP32 and publishes the
+same typed transcript through the Relay's downstream `TranscriptSinkPort`.
 
 ## Configure
 
@@ -31,6 +33,20 @@ openssl rand -hex 32
 
 `VS_RELAY_DEVICE_TOKENS` is a JSON object. Replace `link-probe` with the ESP32
 device ID and its generated credential before building firmware.
+
+For the current speech-to-text milestone, set:
+
+```dotenv
+VS_RELAY_MODE=transcribe
+OPENAI_API_KEY=replace-with-provider-key
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
+OPENAI_TRANSCRIBE_LANGUAGE=zh
+```
+
+`OPENAI_BASE_URL` is optional for OpenAI itself and can point to a compatible
+provider implementing `POST /audio/transcriptions`. The Relay sends a bounded
+16 kHz mono WAV after endpointing; it does not retain raw audio.
 
 ## Start
 
@@ -94,6 +110,12 @@ In `device-link` mode, `/healthz` reports `mode: "device-link"` and
 `connectorReady: false`. A completed device turn writes a structured
 `device_link_audio_received` log containing only frame, byte, and duration
 counts; raw audio is discarded and no transcript is produced.
+
+In `transcribe` mode, `/healthz` reports `mode: "transcribe"`. A successful
+turn sends `transcript.final` to the device, then writes a structured
+`transcript_forwarded` event. That event is the verified downstream boundary
+for a future Agent adapter; it logs identifiers and character count, not the
+transcript body. OpenClaw is not part of this milestone.
 
 The two WSS endpoints are:
 

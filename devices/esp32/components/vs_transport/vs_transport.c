@@ -33,7 +33,6 @@ static void wifi_handler(void *arg, esp_event_base_t base, int32_t id, void *dat
 }
 
 esp_err_t vs_transport_wifi_connect(const char *ssid, const char *password, uint32_t timeout_ms) {
-    if (!ssid || !ssid[0]) return ESP_ERR_INVALID_ARG;
     wifi_events = xEventGroupCreate();
     if (!wifi_events) return ESP_ERR_NO_MEM;
     ESP_RETURN_ON_ERROR(esp_netif_init(), TAG, "netif");
@@ -43,13 +42,19 @@ esp_err_t vs_transport_wifi_connect(const char *ssid, const char *password, uint
     ESP_RETURN_ON_ERROR(esp_wifi_init(&init), TAG, "wifi init");
     ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, wifi_handler, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, wifi_handler, NULL));
-    wifi_config_t config = {0};
-    strlcpy((char *)config.sta.ssid, ssid, sizeof(config.sta.ssid));
-    strlcpy((char *)config.sta.password, password ? password : "", sizeof(config.sta.password));
-    config.sta.threshold.authmode = password && password[0] ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
-    config.sta.pmf_cfg.capable = true;
     ESP_RETURN_ON_ERROR(esp_wifi_set_mode(WIFI_MODE_STA), TAG, "wifi mode");
-    ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_STA, &config), TAG, "wifi config");
+    wifi_config_t config = {0};
+    if (ssid && ssid[0]) {
+        strlcpy((char *)config.sta.ssid, ssid, sizeof(config.sta.ssid));
+        strlcpy((char *)config.sta.password, password ? password : "", sizeof(config.sta.password));
+        config.sta.threshold.authmode = password && password[0] ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
+        config.sta.pmf_cfg.capable = true;
+        ESP_RETURN_ON_ERROR(esp_wifi_set_config(WIFI_IF_STA, &config), TAG, "wifi config");
+    } else {
+        ESP_RETURN_ON_ERROR(esp_wifi_get_config(WIFI_IF_STA, &config), TAG, "saved wifi config");
+        if (!config.sta.ssid[0]) return ESP_ERR_INVALID_STATE;
+        ESP_LOGI(TAG, "using Wi-Fi credentials already stored by the ESP-IDF driver");
+    }
     ESP_RETURN_ON_ERROR(esp_wifi_start(), TAG, "wifi start");
     ESP_RETURN_ON_ERROR(esp_wifi_connect(), TAG, "wifi connect");
     EventBits_t bits = xEventGroupWaitBits(wifi_events, WIFI_READY | WIFI_FAILED, pdFALSE, pdFALSE,
