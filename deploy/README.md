@@ -54,7 +54,7 @@ identifiers and the `shortlived` profile. Set these additional values:
 
 ```dotenv
 VS_PUBLIC_HOST=203.0.113.10
-VS_IP_CERT_DIR=/etc/letsencrypt/live/203.0.113.10
+VS_LETSENCRYPT_DIR=/etc/letsencrypt
 ```
 
 Then start Compose with the IP override:
@@ -65,9 +65,10 @@ docker compose --env-file deploy/.env \
 curl --fail --show-error https://203.0.113.10/healthz
 ```
 
-The certificate directory is mounted read-only into Caddy. Because IP
-certificates are valid for about six days, renewal and a Caddy reload are a
-required part of this mode; do not treat a one-time issuance as a deployment.
+The Let's Encrypt directory is mounted read-only into Caddy so the `live/`
+links can resolve into `archive/`. Because IP certificates are valid for about
+six days, renewal and a Caddy reload are a required part of this mode; do not
+treat a one-time issuance as a deployment.
 
 In `device-link` mode, `/healthz` reports `mode: "device-link"` and
 `connectorReady: false`. A completed device turn writes a structured

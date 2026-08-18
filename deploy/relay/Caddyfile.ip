@@ -4,7 +4,7 @@
 }
 
 https://{$VS_PUBLIC_HOST} {
-	tls /certs/fullchain.pem /certs/privkey.pem
+	tls /etc/letsencrypt/live/{$VS_PUBLIC_HOST}/fullchain.pem /etc/letsencrypt/live/{$VS_PUBLIC_HOST}/privkey.pem
 	encode zstd gzip
 	reverse_proxy relay:8787
 
