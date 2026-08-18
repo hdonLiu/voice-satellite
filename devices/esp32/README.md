@@ -62,16 +62,19 @@ line:
 
 ```json
 {
+  "wifiSsid": "your-wifi",
+  "wifiPassword": "your-wifi-password",
   "relayUrl": "wss://relay.example/v1/device",
   "deviceToken": "per-device-token"
 }
 ```
 
-`wifiSsid` and `wifiPassword` are optional fields. When they are omitted, the
-firmware reuses credentials already stored by the ESP-IDF Wi-Fi driver, which
-allows a board previously connected by another ESP-IDF application to keep its
-network without exposing the password. Provisioning is accepted only while the
-required Relay configuration is missing and is then persisted in `vs_config`.
+`wifiSsid` is required when no Wi-Fi SSID was compiled into the firmware or
+already stored in `vs_config`; `wifiPassword` may be empty for an open network.
+The firmware does not depend on another application's private NVS layout or
+assume that the ESP-IDF Wi-Fi driver retained usable credentials. Provisioning
+is accepted only while required configuration is missing and is then persisted
+in `vs_config`.
 
 For production provisioning, write the same fields into NVS namespace
 `vs_config` with keys `wifi_ssid`, `wifi_pass`, `relay_url`, and `device_token`.

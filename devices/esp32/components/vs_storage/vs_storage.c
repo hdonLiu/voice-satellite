@@ -64,7 +64,8 @@ esp_err_t vs_storage_save(const vs_device_config_t *config) {
 }
 
 bool vs_storage_is_provisioned(const vs_device_config_t *config) {
-    return config && config->relay_url[0] && config->device_token[0];
+    return config && config->wifi_ssid[0] && config->relay_url[0] &&
+           config->device_token[0];
 }
 
 esp_err_t vs_storage_provision_serial(vs_device_config_t *config) {
@@ -118,6 +119,8 @@ esp_err_t vs_storage_provision_serial(vs_device_config_t *config) {
         bool valid = cJSON_IsObject(root) && cJSON_IsString(relay_url) &&
                      cJSON_IsString(device_token) && relay_url->valuestring[0] &&
                      device_token->valuestring[0] &&
+                     ((cJSON_IsString(wifi_ssid) && wifi_ssid->valuestring[0]) ||
+                      config->wifi_ssid[0]) &&
                      strlen(relay_url->valuestring) < sizeof(config->relay_url) &&
                      strlen(device_token->valuestring) < sizeof(config->device_token) &&
                      (!wifi_ssid || (cJSON_IsString(wifi_ssid) &&
