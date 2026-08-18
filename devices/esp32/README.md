@@ -19,9 +19,10 @@ boards/atk-dnesp32s3/  ES8388 audio and ST7789 display implementation
 The default `ptt` profile uses the BOOT key: hold to speak and release to end
 input. During a permission request, pressing BOOT allows the operation; not
 pressing it causes Relay's approval deadline to deny it. Pressing BOOT during
-playback cancels the turn. The `wakenet` profile runs WakeNet only while idle and
-uses local energy endpointing after detection. Both profiles speak identical
-Device Link v1 messages.
+playback cancels the turn. The `wakenet` profile embeds the ESP-SR WakeNet9
+`你好小智` model, listens for it only while idle, starts capture after local
+detection, and uses local energy endpointing to finish the utterance. Both
+profiles speak identical Device Link v1 messages.
 
 The outgoing audio queue is allocated in PSRAM and sized to the configured
 maximum capture duration. This keeps the queue bounded while allowing a public

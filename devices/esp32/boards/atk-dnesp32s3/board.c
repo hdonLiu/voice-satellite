@@ -536,6 +536,11 @@ void vs_board_display_set_state(const char *state) {
         card = "使用提示";
         accent = 0x39D98A;
         deep = 0x075A45;
+    } else if (!strcmp(state, "WakeReady")) {
+        title = "等待唤醒";
+        card = "唤醒提示";
+        accent = 0x39D98A;
+        deep = 0x075A45;
     } else if (!strcmp(state, "Listening")) {
         title = "我在听…";
         card = "你说：";

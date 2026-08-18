@@ -254,7 +254,15 @@ static void set_idle(void) {
     vs_board_set_output(false);
     vs_board_set_status(false);
     vs_board_display_set_audio_level(0);
-    vs_board_display_set_state(device.state == DEVICE_IDLE ? "Ready" : "Offline");
+    if (device.state == DEVICE_IDLE) {
+#if CONFIG_VS_PROFILE_WAKENET
+        vs_board_display_set_state("WakeReady");
+#else
+        vs_board_display_set_state("Ready");
+#endif
+    } else {
+        vs_board_display_set_state("Offline");
+    }
 #if CONFIG_VS_PROFILE_WAKENET
     vs_wake_set_enabled(device.state == DEVICE_IDLE);
 #endif
@@ -293,6 +301,7 @@ static esp_err_t begin_capture(void) {
     vs_board_set_status(true);
     vs_board_display_set_audio_level(0);
     vs_board_display_set_state("Listening");
+    vs_board_display_set_transcript("已唤醒，请讲话…");
     esp_timer_stop(device.capture_timer);
     esp_timer_start_once(device.capture_timer, CONFIG_VS_MAX_CAPTURE_MS * 1000ULL);
     ESP_LOGI(TAG, "capture started, turn=%s", device.turn_id);
@@ -308,6 +317,7 @@ static void end_capture(void) {
     device.state = DEVICE_WAITING;
     vs_board_display_set_audio_level(0);
     vs_board_display_set_state("Recognizing");
+    vs_board_display_set_transcript("语音已结束，正在识别…");
     outgoing_audio_t sentinel = {
         .end = true,
         .generation = atomic_load(&device.capture_generation),
@@ -397,7 +407,7 @@ static void process_control(const uint8_t *data, size_t size) {
         vs_board_display_set_connectivity(true, true);
         set_idle();
 #if CONFIG_VS_PROFILE_WAKENET
-        vs_board_display_set_transcript("说出唤醒词后开始讲话");
+        vs_board_display_set_transcript("请说“你好小智”");
 #else
         vs_board_display_set_transcript("按住 BOOT 键说话");
 #endif
