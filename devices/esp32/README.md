@@ -20,9 +20,10 @@ The default `ptt` profile uses the BOOT key: hold to speak and release to end
 input. During a permission request, pressing BOOT allows the operation; not
 pressing it causes Relay's approval deadline to deny it. Pressing BOOT during
 playback cancels the turn. The `wakenet` profile embeds the ESP-SR WakeNet9
-`你好小智` model, listens for it only while idle, starts capture after local
-detection, and uses local energy endpointing to finish the utterance. Both
-profiles speak identical Device Link v1 messages.
+`你好小智` model and runs it through the same single-microphone, high-performance
+AFE path used by XiaoZhi on ESP32-S3. It listens only while idle, starts capture
+after local detection, and uses local energy endpointing to finish the
+utterance. Both profiles speak identical Device Link v1 messages.
 
 The outgoing audio queue is allocated in PSRAM and sized to the configured
 maximum capture duration. This keeps the queue bounded while allowing a public
