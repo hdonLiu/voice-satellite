@@ -9,7 +9,7 @@ computer, which makes an outbound WSS connection to this Relay.
 
 - one Linux VPS with Docker Engine and the Compose plugin
 - public TCP ports 80 and 443, plus optional UDP 443 for HTTP/3
-- a DNS `A`/`AAAA` record pointing the chosen domain to that VPS
+- normally, a DNS `A`/`AAAA` record pointing the chosen domain to that VPS
 
 The initial `device-link` deployment does not require a speech provider or a
 Connector. It validates authenticated WSS and bounded ESP32 audio upload only.
@@ -44,6 +44,30 @@ Verify the public endpoint:
 ```bash
 curl --fail --show-error https://voice.example.com/healthz
 ```
+
+### Public IP certificate mode
+
+For a device-link proof without a domain, Let's Encrypt can issue a publicly
+trusted, short-lived certificate for a public IPv4 or IPv6 address. Obtain and
+automatically renew that certificate with an ACME client that supports IP
+identifiers and the `shortlived` profile. Set these additional values:
+
+```dotenv
+VS_PUBLIC_HOST=203.0.113.10
+VS_IP_CERT_DIR=/etc/letsencrypt/live/203.0.113.10
+```
+
+Then start Compose with the IP override:
+
+```bash
+docker compose --env-file deploy/.env \
+  -f deploy/compose.yaml -f deploy/compose.ip.yaml up -d --build
+curl --fail --show-error https://203.0.113.10/healthz
+```
+
+The certificate directory is mounted read-only into Caddy. Because IP
+certificates are valid for about six days, renewal and a Caddy reload are a
+required part of this mode; do not treat a one-time issuance as a deployment.
 
 In `device-link` mode, `/healthz` reports `mode: "device-link"` and
 `connectorReady: false`. A completed device turn writes a structured

@@ -1,0 +1,15 @@
+{
+	admin off
+	default_sni {$VS_PUBLIC_HOST}
+}
+
+https://{$VS_PUBLIC_HOST} {
+	tls /certs/fullchain.pem /certs/privkey.pem
+	encode zstd gzip
+	reverse_proxy relay:8787
+
+	log {
+		output stdout
+		format json
+	}
+}

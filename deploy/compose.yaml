@@ -32,8 +32,8 @@ services:
   caddy:
     image: caddy:2-alpine
     environment:
-      VS_DOMAIN: ${VS_DOMAIN:?set VS_DOMAIN in deploy/.env}
-      ACME_EMAIL: ${ACME_EMAIL:?set ACME_EMAIL in deploy/.env}
+      VS_DOMAIN: ${VS_DOMAIN:-}
+      ACME_EMAIL: ${ACME_EMAIL:-}
     restart: unless-stopped
     depends_on:
       relay:

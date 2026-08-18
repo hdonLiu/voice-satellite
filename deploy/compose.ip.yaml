@@ -1,0 +1,7 @@
+services:
+  caddy:
+    environment:
+      VS_PUBLIC_HOST: ${VS_PUBLIC_HOST:?set VS_PUBLIC_HOST in deploy/.env}
+    volumes:
+      - ./relay/Caddyfile.ip:/etc/caddy/Caddyfile:ro
+      - ${VS_IP_CERT_DIR:?set VS_IP_CERT_DIR in deploy/.env}:/certs:ro
