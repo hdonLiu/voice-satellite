@@ -475,17 +475,8 @@ esp_err_t vs_board_init(vs_board_button_callback_t callback, void *context) {
     ESP_ERROR_CHECK(gpio_isr_handler_add(ATK_BOOT_BUTTON, button_isr, NULL));
     xTaskCreate(button_task, "vs_button", 2048, NULL, 8, NULL);
     ESP_RETURN_ON_ERROR(initialize_i2c(), TAG, "i2c");
-    esp_err_t expander_status = initialize_xl9555();
-    if (expander_status == ESP_OK) {
-        esp_err_t display_status = initialize_display();
-        if (display_status != ESP_OK) {
-            ESP_LOGW(TAG, "Display unavailable; continuing with voice only: %s",
-                     esp_err_to_name(display_status));
-        }
-    } else {
-        ESP_LOGW(TAG, "XL9555 unavailable; continuing without display: %s",
-                 esp_err_to_name(expander_status));
-    }
+    ESP_RETURN_ON_ERROR(initialize_xl9555(), TAG, "xl9555");
+    ESP_RETURN_ON_ERROR(initialize_display(), TAG, "display");
     ESP_RETURN_ON_ERROR(initialize_i2s(), TAG, "i2s");
     ESP_RETURN_ON_ERROR(initialize_codec(), TAG, "es8388");
     ESP_LOGI(TAG, "ATK-DNESP32S3 audio board ready");
