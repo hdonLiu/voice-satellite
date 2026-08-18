@@ -6,7 +6,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include "esp_ae_rate_cvt.h"
-#include "esp_audio_types.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
@@ -45,10 +44,12 @@ static void capture_task(void *context) {
             continue;
         }
         uint32_t output_samples = VS_INPUT_SAMPLES_PER_FRAME;
-        esp_ae_rate_cvt_process(input_resampler, (esp_ae_sample_t *)native, 480,
-                                (esp_ae_sample_t *)protocol, &output_samples);
-        if (output_samples != VS_INPUT_SAMPLES_PER_FRAME) {
-            ESP_LOGW(TAG, "resampler produced %" PRIu32 " samples", output_samples);
+        esp_ae_err_t result = esp_ae_rate_cvt_process(
+            input_resampler, (esp_ae_sample_t)native, 480, (esp_ae_sample_t)protocol,
+            &output_samples);
+        if (result != ESP_AE_ERR_OK || output_samples != VS_INPUT_SAMPLES_PER_FRAME) {
+            ESP_LOGW(TAG, "resampler failed (%d), produced %" PRIu32 " samples", result,
+                     output_samples);
             continue;
         }
         if (monitor_callback) monitor_callback(protocol, VS_INPUT_SAMPLES_PER_FRAME, callback_context);
@@ -79,17 +80,18 @@ esp_err_t vs_audio_init(vs_audio_capture_callback_t capture, vs_audio_monitor_ca
     atomic_init(&capture_enabled, false);
     atomic_init(&playback_generation, 1);
     atomic_init(&pending_playback_frames, 0);
-    const esp_ae_rate_cvt_cfg_t resampler_config = {
+    esp_ae_rate_cvt_cfg_t resampler_config = {
         .src_rate = VS_BOARD_CAPTURE_RATE_HZ,
         .dest_rate = VS_INPUT_SAMPLE_RATE_HZ,
         .channel = 1,
-        .bits_per_sample = ESP_AUDIO_BIT16,
+        .bits_per_sample = ESP_AE_BIT16,
         .complexity = 2,
         .perf_type = ESP_AE_RATE_CVT_PERF_TYPE_SPEED,
     };
-    esp_ae_rate_cvt_open(&resampler_config, &input_resampler);
-    if (!input_resampler) {
-        ESP_LOGE(TAG, "failed to initialize 24 kHz to 16 kHz resampler");
+    esp_ae_err_t resampler_result = esp_ae_rate_cvt_open(&resampler_config, &input_resampler);
+    if (resampler_result != ESP_AE_ERR_OK || !input_resampler) {
+        ESP_LOGE(TAG, "failed to initialize 24 kHz to 16 kHz resampler (%d)",
+                 resampler_result);
         return ESP_FAIL;
     }
     playback_queue_storage = heap_caps_malloc(PLAYBACK_QUEUE_FRAMES * sizeof(playback_frame_t),
