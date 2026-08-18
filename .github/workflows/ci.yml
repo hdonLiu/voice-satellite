@@ -70,7 +70,7 @@ jobs:
         shell: bash
         run: |
           source /opt/esp/idf/export.sh
-          idf.py merge-bin -o "build/voice-satellite-${{ matrix.profile }}.bin"
+          idf.py merge-bin -o "voice-satellite-${{ matrix.profile }}.bin"
       - name: Upload flashable firmware
         uses: actions/upload-artifact@v4
         with:
