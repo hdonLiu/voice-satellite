@@ -83,7 +83,11 @@ typedef struct {
 } device_t;
 
 static device_t device;
+static StaticQueue_t outgoing_audio_queue_control;
+static uint8_t *outgoing_audio_queue_storage;
 static void cancel_turn(void);
+
+#define OUTGOING_AUDIO_QUEUE_FRAMES 25
 
 static void post_event_wait(device_event_type_t type, const void *data, size_t size,
                             TickType_t wait) {
@@ -499,7 +503,14 @@ esp_err_t vs_device_start(void) {
     atomic_init(&device.capture_generation, 0);
     device.state = DEVICE_OFFLINE;
     device.events = xQueueCreate(32, sizeof(device_event_t));
-    device.outgoing_audio = xQueueCreate(25, sizeof(outgoing_audio_t));
+    outgoing_audio_queue_storage = heap_caps_malloc(
+        OUTGOING_AUDIO_QUEUE_FRAMES * sizeof(outgoing_audio_t),
+        MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (outgoing_audio_queue_storage) {
+        device.outgoing_audio = xQueueCreateStatic(
+            OUTGOING_AUDIO_QUEUE_FRAMES, sizeof(outgoing_audio_t),
+            outgoing_audio_queue_storage, &outgoing_audio_queue_control);
+    }
     device.capture_mutex = xSemaphoreCreateMutex();
     if (!device.events || !device.outgoing_audio || !device.capture_mutex) return ESP_ERR_NO_MEM;
     ESP_RETURN_ON_ERROR(vs_storage_init(), TAG, "storage init");

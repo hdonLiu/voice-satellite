@@ -2,7 +2,9 @@
 
 #include <math.h>
 #include <stdatomic.h>
+#include <stdlib.h>
 #include <string.h>
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
@@ -17,7 +19,11 @@ static vs_audio_monitor_callback_t monitor_callback;
 static vs_audio_drained_callback_t drained_callback;
 static void *callback_context;
 static QueueHandle_t playback_queue;
+static StaticQueue_t playback_queue_control;
+static uint8_t *playback_queue_storage;
 static atomic_uint pending_playback_frames;
+
+#define PLAYBACK_QUEUE_FRAMES 100
 
 typedef struct {
     uint32_t generation;
@@ -74,8 +80,16 @@ esp_err_t vs_audio_init(vs_audio_capture_callback_t capture, vs_audio_monitor_ca
     atomic_init(&capture_enabled, false);
     atomic_init(&playback_generation, 1);
     atomic_init(&pending_playback_frames, 0);
-    playback_queue = xQueueCreate(100, sizeof(playback_frame_t));
-    if (!playback_queue) return ESP_ERR_NO_MEM;
+    playback_queue_storage = heap_caps_malloc(PLAYBACK_QUEUE_FRAMES * sizeof(playback_frame_t),
+                                              MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
+    if (!playback_queue_storage) return ESP_ERR_NO_MEM;
+    playback_queue = xQueueCreateStatic(PLAYBACK_QUEUE_FRAMES, sizeof(playback_frame_t),
+                                        playback_queue_storage, &playback_queue_control);
+    if (!playback_queue) {
+        free(playback_queue_storage);
+        playback_queue_storage = NULL;
+        return ESP_ERR_NO_MEM;
+    }
     if (xTaskCreatePinnedToCore(capture_task, "vs_capture", 4096, NULL, 9, NULL, 0) != pdPASS)
         return ESP_ERR_NO_MEM;
     if (xTaskCreate(playback_task, "vs_playback", 4096, NULL, 7, NULL) != pdPASS)
