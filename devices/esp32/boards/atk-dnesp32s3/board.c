@@ -36,15 +36,13 @@ static esp_codec_dev_handle_t output_device;
 static QueueHandle_t button_queue;
 static vs_board_button_callback_t button_callback;
 static void *button_context;
-static lv_obj_t *display_state_label;
-static lv_obj_t *display_state_dot;
 static lv_obj_t *display_title_label;
 static lv_obj_t *display_card_title_label;
 static lv_obj_t *display_transcript_label;
 static lv_obj_t *display_wifi_dot;
-static lv_obj_t *display_wifi_label;
-static lv_obj_t *display_cloud_dot;
-static lv_obj_t *display_cloud_label;
+static lv_obj_t *display_wifi_arcs[2];
+static lv_obj_t *display_cloud_parts[4];
+static lv_obj_t *display_mic_parts[7];
 static lv_obj_t *display_orb;
 
 #define DISPLAY_WAVE_BAR_COUNT 15
@@ -102,42 +100,61 @@ static void initialize_display_ui(void) {
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
     lv_obj_set_style_text_font(screen, &vs_font_cjk_16, 0);
 
-    lv_obj_t *status_chip = create_panel(screen);
-    lv_obj_set_pos(status_chip, 8, 8);
-    lv_obj_set_size(status_chip, 132, 28);
-    lv_obj_set_style_bg_color(status_chip, lv_color_hex(0x0E1929), 0);
-    lv_obj_set_style_radius(status_chip, 14, 0);
-    lv_obj_set_style_border_width(status_chip, 1, 0);
-    lv_obj_set_style_border_color(status_chip, lv_color_hex(0x1C2B41), 0);
+    lv_obj_t *input_chip = create_panel(screen);
+    lv_obj_set_pos(input_chip, 8, 8);
+    lv_obj_set_size(input_chip, 68, 28);
+    lv_obj_set_style_bg_color(input_chip, lv_color_hex(0x0E1929), 0);
+    lv_obj_set_style_radius(input_chip, 14, 0);
+    lv_obj_set_style_border_width(input_chip, 1, 0);
+    lv_obj_set_style_border_color(input_chip, lv_color_hex(0x1C2B41), 0);
 
-    display_state_dot = create_panel(status_chip);
-    lv_obj_set_size(display_state_dot, 8, 8);
-    lv_obj_set_style_radius(display_state_dot, LV_RADIUS_CIRCLE, 0);
-    style_dot(display_state_dot, 0x2F8CFF);
-    lv_obj_align(display_state_dot, LV_ALIGN_LEFT_MID, 10, 0);
+    display_mic_parts[0] = create_panel(input_chip);
+    lv_obj_set_pos(display_mic_parts[0], 11, 5);
+    lv_obj_set_size(display_mic_parts[0], 8, 12);
+    lv_obj_set_style_radius(display_mic_parts[0], LV_RADIUS_CIRCLE, 0);
+    display_mic_parts[1] = create_panel(input_chip);
+    lv_obj_set_pos(display_mic_parts[1], 14, 17);
+    lv_obj_set_size(display_mic_parts[1], 2, 5);
+    display_mic_parts[2] = create_panel(input_chip);
+    lv_obj_set_pos(display_mic_parts[2], 10, 21);
+    lv_obj_set_size(display_mic_parts[2], 10, 2);
+    lv_obj_set_style_radius(display_mic_parts[2], LV_RADIUS_CIRCLE, 0);
+    static const uint8_t mic_bar_heights[] = {4, 8, 12, 6};
+    for (size_t i = 0; i < 4; ++i) {
+        display_mic_parts[i + 3] = create_panel(input_chip);
+        lv_obj_set_size(display_mic_parts[i + 3], 3, mic_bar_heights[i]);
+        lv_obj_set_pos(display_mic_parts[i + 3], 31 + (int)i * 7,
+                       14 - mic_bar_heights[i] / 2);
+        lv_obj_set_style_radius(display_mic_parts[i + 3], LV_RADIUS_CIRCLE, 0);
+    }
 
-    display_state_label = lv_label_create(status_chip);
-    lv_label_set_text(display_state_label, "启动中");
-    lv_obj_set_style_text_color(display_state_label, lv_color_hex(0xDCEBFF), 0);
-    lv_obj_align(display_state_label, LV_ALIGN_LEFT_MID, 27, 0);
-
+    static const int16_t wifi_sizes[][2] = {{26, 22}, {18, 14}};
+    static const int16_t wifi_positions[][2] = {{250, 7}, {254, 12}};
+    for (size_t i = 0; i < 2; ++i) {
+        display_wifi_arcs[i] = lv_arc_create(screen);
+        lv_obj_remove_style_all(display_wifi_arcs[i]);
+        lv_obj_set_size(display_wifi_arcs[i], wifi_sizes[i][0], wifi_sizes[i][1]);
+        lv_obj_set_pos(display_wifi_arcs[i], wifi_positions[i][0], wifi_positions[i][1]);
+        lv_arc_set_bg_angles(display_wifi_arcs[i], 200, 340);
+        lv_obj_set_style_arc_width(display_wifi_arcs[i], 2, LV_PART_MAIN);
+        lv_obj_set_style_arc_rounded(display_wifi_arcs[i], true, LV_PART_MAIN);
+        lv_obj_set_style_arc_opa(display_wifi_arcs[i], LV_OPA_COVER, LV_PART_MAIN);
+        lv_obj_clear_flag(display_wifi_arcs[i], LV_OBJ_FLAG_CLICKABLE);
+    }
     display_wifi_dot = create_panel(screen);
-    lv_obj_set_size(display_wifi_dot, 7, 7);
+    lv_obj_set_size(display_wifi_dot, 5, 5);
     lv_obj_set_style_radius(display_wifi_dot, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_pos(display_wifi_dot, 184, 19);
-    display_wifi_label = lv_label_create(screen);
-    lv_label_set_text(display_wifi_label, "Wi-Fi");
-    lv_obj_set_style_text_color(display_wifi_label, lv_color_hex(0x73849A), 0);
-    lv_obj_set_pos(display_wifi_label, 196, 11);
+    lv_obj_set_pos(display_wifi_dot, 260, 27);
 
-    display_cloud_dot = create_panel(screen);
-    lv_obj_set_size(display_cloud_dot, 7, 7);
-    lv_obj_set_style_radius(display_cloud_dot, LV_RADIUS_CIRCLE, 0);
-    lv_obj_set_pos(display_cloud_dot, 258, 19);
-    display_cloud_label = lv_label_create(screen);
-    lv_label_set_text(display_cloud_label, "云端");
-    lv_obj_set_style_text_color(display_cloud_label, lv_color_hex(0x73849A), 0);
-    lv_obj_set_pos(display_cloud_label, 270, 11);
+    static const int16_t cloud_geometry[][4] = {
+        {286, 16, 10, 10}, {293, 11, 14, 14}, {303, 17, 9, 9}, {287, 20, 25, 8},
+    };
+    for (size_t i = 0; i < 4; ++i) {
+        display_cloud_parts[i] = create_panel(screen);
+        lv_obj_set_pos(display_cloud_parts[i], cloud_geometry[i][0], cloud_geometry[i][1]);
+        lv_obj_set_size(display_cloud_parts[i], cloud_geometry[i][2], cloud_geometry[i][3]);
+        lv_obj_set_style_radius(display_cloud_parts[i], LV_RADIUS_CIRCLE, 0);
+    }
 
     lv_obj_t *halo = create_panel(screen);
     lv_obj_set_size(halo, 80, 80);
@@ -217,8 +234,13 @@ static void initialize_display_ui(void) {
     lv_obj_set_style_text_line_space(display_transcript_label, 3, 0);
     lv_obj_set_pos(display_transcript_label, 14, 29);
 
+    for (size_t i = 0; i < 7; ++i)
+        lv_obj_set_style_bg_color(display_mic_parts[i], lv_color_hex(0x2F8CFF), 0);
+    for (size_t i = 0; i < 2; ++i)
+        lv_obj_set_style_arc_color(display_wifi_arcs[i], lv_color_hex(0x5C6B80), LV_PART_MAIN);
     style_dot(display_wifi_dot, 0x5C6B80);
-    style_dot(display_cloud_dot, 0x5C6B80);
+    for (size_t i = 0; i < 4; ++i)
+        lv_obj_set_style_bg_color(display_cloud_parts[i], lv_color_hex(0x5C6B80), 0);
 }
 
 static esp_err_t initialize_display(void) {
@@ -478,87 +500,75 @@ void vs_board_set_status(bool active) {
 }
 
 static void set_ui_accent(uint32_t color, uint32_t deep_color) {
-    style_dot(display_state_dot, color);
     lv_obj_set_style_bg_color(display_orb, lv_color_hex(deep_color), 0);
     lv_obj_set_style_bg_grad_color(display_orb, lv_color_hex(color), 0);
     lv_obj_set_style_border_color(display_orb, lv_color_hex(color), 0);
     lv_obj_set_style_shadow_color(display_orb, lv_color_hex(color), 0);
     lv_obj_set_style_text_color(display_card_title_label, lv_color_hex(color), 0);
+    for (size_t i = 0; i < 7; ++i)
+        lv_obj_set_style_bg_color(display_mic_parts[i], lv_color_hex(color), 0);
     for (size_t i = 0; i < DISPLAY_WAVE_BAR_COUNT; ++i)
         lv_obj_set_style_bg_color(display_wave_bars[i], lv_color_hex(color), 0);
 }
 
 void vs_board_display_set_state(const char *state) {
-    if (!display_state_label || !state || !lvgl_port_lock(100)) return;
+    if (!display_title_label || !state || !lvgl_port_lock(100)) return;
 
-    const char *chip = "启动中";
     const char *title = "启动中";
     const char *card = "连接状态";
     uint32_t accent = 0x2F8CFF;
     uint32_t deep = 0x0B3A70;
 
     if (!strcmp(state, "Provisioning")) {
-        chip = "等待配置";
         title = "等待设备配置";
         accent = 0xFFAA33;
         deep = 0x6A3A08;
     } else if (!strcmp(state, "WiFiConnecting")) {
-        chip = "连接网络";
         title = "正在连接网络";
         accent = 0xFFAA33;
         deep = 0x6A3A08;
     } else if (!strcmp(state, "CloudConnecting")) {
-        chip = "连接云端";
         title = "正在连接云端";
         accent = 0xFFAA33;
         deep = 0x6A3A08;
     } else if (!strcmp(state, "Ready")) {
-        chip = "准备就绪";
         title = "按住说话";
         card = "使用提示";
         accent = 0x39D98A;
         deep = 0x075A45;
     } else if (!strcmp(state, "Listening")) {
-        chip = "聆听中";
         title = "我在听…";
         card = "你说：";
     } else if (!strcmp(state, "Recognizing")) {
-        chip = "识别中";
         title = "正在识别…";
         card = "你说：";
         accent = 0xFFB84D;
         deep = 0x6A3A08;
     } else if (!strcmp(state, "Forwarding")) {
-        chip = "转发中";
         title = "正在转发…";
         card = "你说：";
         accent = 0x8C6CFF;
         deep = 0x35206E;
     } else if (!strcmp(state, "Recognized")) {
-        chip = "已识别";
         title = "识别完成";
         card = "你说：";
         accent = 0x39D98A;
         deep = 0x075A45;
     } else if (!strcmp(state, "Speaking")) {
-        chip = "语音输出";
         title = "我在说…";
         card = "AI 回答：";
         accent = 0xB45CFF;
         deep = 0x4A176D;
     } else if (!strcmp(state, "Offline")) {
-        chip = "云端离线";
         title = "云端重连中";
         accent = 0xFFAA33;
         deep = 0x6A3A08;
     } else if (!strcmp(state, "Error")) {
-        chip = "连接失败";
         title = "连接失败";
         accent = 0xFF5D73;
         deep = 0x701C31;
     }
 
-    lv_label_set_text(display_state_label, chip);
     lv_label_set_text(display_title_label, title);
     lv_label_set_text(display_card_title_label, card);
     set_ui_accent(accent, deep);
@@ -572,15 +582,16 @@ void vs_board_display_set_transcript(const char *text) {
 }
 
 void vs_board_display_set_connectivity(bool wifi_connected, bool cloud_connected) {
-    if (!display_wifi_dot || !lvgl_port_lock(100)) return;
+    if (!display_wifi_arcs[0] || !lvgl_port_lock(100)) return;
 
     uint32_t wifi_color = wifi_connected ? 0x39D98A : 0xFFAA33;
     uint32_t cloud_color = cloud_connected ? 0x39D98A
                                            : (wifi_connected ? 0xFFAA33 : 0x5C6B80);
+    for (size_t i = 0; i < 2; ++i)
+        lv_obj_set_style_arc_color(display_wifi_arcs[i], lv_color_hex(wifi_color), LV_PART_MAIN);
     style_dot(display_wifi_dot, wifi_color);
-    style_dot(display_cloud_dot, cloud_color);
-    lv_obj_set_style_text_color(display_wifi_label, lv_color_hex(wifi_color), 0);
-    lv_obj_set_style_text_color(display_cloud_label, lv_color_hex(cloud_color), 0);
+    for (size_t i = 0; i < 4; ++i)
+        lv_obj_set_style_bg_color(display_cloud_parts[i], lv_color_hex(cloud_color), 0);
     lvgl_port_unlock();
 }
 

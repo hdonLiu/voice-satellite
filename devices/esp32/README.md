@@ -28,11 +28,14 @@ maximum capture duration. This keeps the queue bounded while allowing a public
 WSS link to drain more slowly than the microphone's real-time 20 ms frame rate
 without truncating the recording.
 
-The 320x240 display presents separate Wi-Fi and cloud connection progress,
-link/turn state, a live microphone level waveform, and the latest
-`transcript.final`. Its generated Source Han Sans fonts cover Latin text,
-general punctuation, full-width forms, and the complete CJK Unified Ideographs
-basic block (`U+4E00-U+9FFF`). Font generation is reproducible through
+The 320x240 display uses a phone-style status row: a microphone activity mark
+on the left, Wi-Fi signal arcs and a separate cloud icon on the right, and one
+central title as the authoritative link/turn state. It also presents a live
+microphone level waveform and the latest `transcript.final`. Its generated
+Source Han Sans fonts cover Latin text, general punctuation, full-width forms,
+and the complete CJK Unified Ideographs basic block (`U+4E00-U+9FFF`). The
+generated fonts are compressed, so `CONFIG_LV_USE_FONT_COMPRESSED=y` is required
+and enforced at compile time. Font generation is reproducible through
 `tools/generate-fonts.sh`; attribution and the SIL Open Font License are kept in
 `third_party/source-han-sans`.
 
