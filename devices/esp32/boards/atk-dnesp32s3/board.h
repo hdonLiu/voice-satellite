@@ -9,7 +9,9 @@
 #define ATK_I2S_DOUT GPIO_NUM_10
 #define ATK_I2C_SDA GPIO_NUM_41
 #define ATK_I2C_SCL GPIO_NUM_42
-#define ATK_ES8388_ADDR 0x10
+// esp_codec_dev accepts the ES8388 8-bit control address and converts it to
+// the 7-bit I2C address (0x10) when using ESP-IDF's new I2C master driver.
+#define ATK_ES8388_CODEC_ADDR 0x20
 #define ATK_BOOT_BUTTON GPIO_NUM_0
 #define ATK_STATUS_LED GPIO_NUM_1
 

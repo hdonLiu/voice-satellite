@@ -258,7 +258,7 @@ static esp_err_t initialize_codec(void) {
     data_if = audio_codec_new_i2s_data(&i2s_config);
     const audio_codec_i2c_cfg_t i2c_config = {
         .port = I2C_NUM_0,
-        .addr = ATK_ES8388_ADDR,
+        .addr = ATK_ES8388_CODEC_ADDR,
         .bus_handle = i2c_bus,
     };
     ctrl_if = audio_codec_new_i2c_ctrl(&i2c_config);
