@@ -5,6 +5,8 @@ x-whisper-runtime: &whisper-runtime
   build:
     context: ..
     dockerfile: deploy/whisper/Dockerfile
+    args:
+      LIBGOMP_URL: ${LIBGOMP_URL:-https://deb.debian.org/debian/pool/main/g/gcc-12/libgomp1_12.2.0-14+deb12u1_amd64.deb}
 
 services:
   relay:

@@ -66,6 +66,11 @@ when another transport path is required:
 WHISPER_MODEL_URL=https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin
 ```
 
+The runtime also checksum-pins Debian's small `libgomp1` package. On Tencent
+Cloud, `LIBGOMP_URL` may point to the corresponding Tencent Debian mirror URL
+shown in `.env.example`; changing the transport URL does not change the
+accepted package bytes.
+
 Alternatively, set `VS_ASR_PROVIDER=openai`, provide `OPENAI_API_KEY`, and
 optionally set `OPENAI_BASE_URL` to a compatible provider implementing
 `POST /audio/transcriptions`. The Relay sends a bounded 16 kHz mono WAV after
