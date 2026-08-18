@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   OpenAiPcmTts,
   OpenAiTranscriptionAsr,
+  WhisperCppAsr,
   pcmS16leToWav,
 } from "../src/index.js";
 
@@ -45,6 +46,37 @@ describe("OpenAI speech adapters", () => {
     expect(fetch.mock.calls[0]?.[0]).toBe(
       "https://api.openai.com/v1/audio/transcriptions",
     );
+  });
+
+  it("posts a compatible WAV to a private whisper.cpp server", async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ text: " 本地识别 " }), { status: 200 }),
+      );
+    const asr = new WhisperCppAsr({
+      baseUrl: "http://whisper.internal:8080/",
+      language: "zh",
+      fetch,
+    });
+    const stream = await asr.open(context, new AbortController().signal);
+    await stream.push({
+      streamId: asId<"AudioStreamId">("00112233-4455-6677-8899-aabbccddeeff"),
+      sequence: 0,
+      timestampMs: 0,
+      data: new Uint8Array(640),
+    });
+    await stream.finish();
+    const events = [];
+    for await (const event of stream.events) events.push(event);
+    expect(events).toEqual([{ type: "final", text: "本地识别" }]);
+    expect(fetch.mock.calls[0]?.[0]).toBe(
+      "http://whisper.internal:8080/inference",
+    );
+    const form = fetch.mock.calls[0]?.[1]?.body;
+    expect(form).toBeInstanceOf(FormData);
+    expect((form as FormData).get("language")).toBe("zh");
+    expect((form as FormData).get("response_format")).toBe("json");
   });
 
   it("frames streamed 24 kHz PCM and pads only the final frame", async () => {

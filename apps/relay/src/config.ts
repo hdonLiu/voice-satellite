@@ -6,6 +6,11 @@ import {
 } from "./server/relay-server.js";
 import type { OpenAiAsrConfig } from "./adapters/speech/openai/openai-asr.js";
 import type { OpenAiTtsConfig } from "./adapters/speech/openai/openai-tts.js";
+import type { WhisperCppAsrConfig } from "./adapters/speech/whisper-cpp/whisper-cpp-asr.js";
+
+export type RelayAsrConfig =
+  | { readonly provider: "openai"; readonly config: OpenAiAsrConfig }
+  | { readonly provider: "whisper-cpp"; readonly config: WhisperCppAsrConfig };
 
 interface BaseRelayConfig {
   readonly mode: RelayMode;
@@ -18,12 +23,12 @@ export interface DeviceLinkRelayConfig extends BaseRelayConfig {
 
 export interface TranscribeRelayConfig extends BaseRelayConfig {
   readonly mode: "transcribe";
-  readonly asr: OpenAiAsrConfig;
+  readonly asr: RelayAsrConfig;
 }
 
 export interface ConversationRelayConfig extends BaseRelayConfig {
   readonly mode: "conversation";
-  readonly asr: OpenAiAsrConfig;
+  readonly asr: RelayAsrConfig;
   readonly tts: OpenAiTtsConfig;
 }
 
@@ -61,19 +66,13 @@ export function relayConfigFromEnv(
   };
   if (mode === "device-link") return { mode, server };
 
+  const asr = asrConfig(env);
+  if (mode === "transcribe") return { mode, server, asr };
   const apiKey = required(env, "OPENAI_API_KEY");
   const common = {
     apiKey,
     ...(env.OPENAI_BASE_URL ? { baseUrl: env.OPENAI_BASE_URL } : {}),
   };
-  const asr = {
-    ...common,
-    model: env.OPENAI_TRANSCRIBE_MODEL ?? "gpt-4o-mini-transcribe",
-    ...(env.OPENAI_TRANSCRIBE_LANGUAGE
-      ? { language: env.OPENAI_TRANSCRIBE_LANGUAGE }
-      : {}),
-  };
-  if (mode === "transcribe") return { mode, server, asr };
   return {
     mode,
     server: {
@@ -91,6 +90,32 @@ export function relayConfigFromEnv(
       ...(env.OPENAI_TTS_INSTRUCTIONS
         ? { instructions: env.OPENAI_TTS_INSTRUCTIONS }
         : {}),
+    },
+  };
+}
+
+function asrConfig(env: NodeJS.ProcessEnv): RelayAsrConfig {
+  const provider = env.VS_ASR_PROVIDER ?? "openai";
+  const language = env.OPENAI_TRANSCRIBE_LANGUAGE ?? "zh";
+  if (provider === "whisper-cpp") {
+    return {
+      provider,
+      config: {
+        language,
+        ...(env.WHISPER_CPP_URL ? { baseUrl: env.WHISPER_CPP_URL } : {}),
+      },
+    };
+  }
+  if (provider !== "openai") {
+    throw new Error("VS_ASR_PROVIDER must be openai or whisper-cpp");
+  }
+  return {
+    provider,
+    config: {
+      apiKey: required(env, "OPENAI_API_KEY"),
+      ...(env.OPENAI_BASE_URL ? { baseUrl: env.OPENAI_BASE_URL } : {}),
+      model: env.OPENAI_TRANSCRIBE_MODEL ?? "gpt-4o-mini-transcribe",
+      language,
     },
   };
 }

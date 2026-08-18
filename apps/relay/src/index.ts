@@ -6,6 +6,7 @@ export * from "./application/turn-registry.js";
 export * from "./adapters/speech/openai/openai-asr.js";
 export * from "./adapters/speech/openai/openai-tts.js";
 export * from "./adapters/speech/openai/wav.js";
+export * from "./adapters/speech/whisper-cpp/whisper-cpp-asr.js";
 export * from "./adapters/transcript/console-transcript-sink.js";
 export * from "./server/relay-server.js";
 export * from "./ports/agent.js";

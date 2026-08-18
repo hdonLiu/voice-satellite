@@ -1,0 +1,77 @@
+name: voice-satellite
+
+x-whisper-runtime: &whisper-runtime
+  image: voice-satellite-whisper-runtime:1.9.1
+  build:
+    context: ..
+    dockerfile: deploy/whisper/Dockerfile
+
+services:
+  relay:
+    depends_on:
+      whisper:
+        condition: service_healthy
+
+  whisper-assets:
+    <<: *whisper-runtime
+    command: ["node", "/opt/voice-satellite/download-assets.mjs"]
+    restart: "no"
+    environment:
+      WHISPER_CPP_ARCHIVE_URL: ${WHISPER_CPP_ARCHIVE_URL:-}
+      WHISPER_MODEL_URL: ${WHISPER_MODEL_URL:-}
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m,mode=1777
+    volumes:
+      - whisper_runtime:/opt/whisper
+      - whisper_models:/models
+    security_opt:
+      - no-new-privileges:true
+
+  whisper:
+    <<: *whisper-runtime
+    command:
+      - /opt/whisper/run-server
+      - --host
+      - 0.0.0.0
+      - --port
+      - "8080"
+      - --no-gpu
+      - --threads
+      - "2"
+      - --language
+      - ${OPENAI_TRANSCRIBE_LANGUAGE:-zh}
+      - --model
+      - /models/ggml-base-q5_1.bin
+    restart: unless-stopped
+    init: true
+    user: node
+    read_only: true
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    depends_on:
+      whisper-assets:
+        condition: service_completed_successfully
+    volumes:
+      - whisper_runtime:/opt/whisper:ro
+      - whisper_models:/models:ro
+    expose:
+      - "8080"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:8080/').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 18
+      start_period: 60s
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  whisper_runtime:
+  whisper_models:

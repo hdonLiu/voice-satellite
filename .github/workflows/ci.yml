@@ -31,10 +31,17 @@ jobs:
       - uses: actions/checkout@v4
       - name: Build production Relay image
         run: docker build --file deploy/relay/Dockerfile --tag voice-satellite-relay:ci .
+      - name: Build whisper.cpp runtime image
+        run: docker build --file deploy/whisper/Dockerfile --tag voice-satellite-whisper-runtime:ci .
       - name: Validate Compose configuration
         env:
           VS_ENV_FILE: .env.example
-        run: docker compose --env-file deploy/.env.example --file deploy/compose.yaml config --quiet
+        run: |
+          docker compose --env-file deploy/.env.example \
+            --file deploy/compose.yaml config --quiet
+          docker compose --env-file deploy/.env.example \
+            --file deploy/compose.yaml --file deploy/compose.whisper.yaml \
+            config --quiet
 
   firmware:
     runs-on: ubuntu-latest

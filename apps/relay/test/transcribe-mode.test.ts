@@ -59,14 +59,17 @@ describe("transcribe Relay mode", () => {
   it("requires ASR but not Connector or TTS configuration", () => {
     const config = relayConfigFromEnv({
       VS_RELAY_MODE: "transcribe",
+      VS_ASR_PROVIDER: "whisper-cpp",
       VS_RELAY_DEVICE_TOKENS: JSON.stringify({ "device-test": "secret" }),
-      OPENAI_API_KEY: "asr-secret",
       OPENAI_TRANSCRIBE_LANGUAGE: "zh",
     });
 
     expect(config.mode).toBe("transcribe");
     if (config.mode !== "transcribe") throw new Error("unexpected mode");
-    expect(config.asr.language).toBe("zh");
+    expect(config.asr).toEqual({
+      provider: "whisper-cpp",
+      config: { language: "zh" },
+    });
     expect(config.server.connectorCredential).toBeUndefined();
   });
 

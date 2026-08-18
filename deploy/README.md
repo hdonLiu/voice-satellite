@@ -34,19 +34,42 @@ openssl rand -hex 32
 `VS_RELAY_DEVICE_TOKENS` is a JSON object. Replace `link-probe` with the ESP32
 device ID and its generated credential before building firmware.
 
-For the current speech-to-text milestone, set:
+For the current self-hosted speech-to-text milestone, set:
 
 ```dotenv
 VS_RELAY_MODE=transcribe
-OPENAI_API_KEY=replace-with-provider-key
-OPENAI_BASE_URL=https://api.openai.com/v1
-OPENAI_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe
+VS_ASR_PROVIDER=whisper-cpp
+WHISPER_CPP_URL=http://whisper:8080
 OPENAI_TRANSCRIBE_LANGUAGE=zh
 ```
 
-`OPENAI_BASE_URL` is optional for OpenAI itself and can point to a compatible
-provider implementing `POST /audio/transcriptions`. The Relay sends a bounded
-16 kHz mono WAV after endpointing; it does not retain raw audio.
+Start the local whisper.cpp overlay together with the normal Compose files:
+
+```bash
+docker compose --env-file deploy/.env \
+  -f deploy/compose.yaml -f deploy/compose.whisper.yaml up -d --build
+```
+
+The one-shot `whisper-assets` service installs pinned whisper.cpp `v1.9.1` and
+the multilingual `base-q5_1` model into named volumes. Both downloads are
+checked against their upstream size and SHA-256 before use. The CPU-only
+`whisper` service exposes `/inference` only on the private Compose network and
+requires no ASR credential. On a small 2-vCPU host this is intended to prove
+the chain, not provide production latency or transcription quality.
+
+The default model URL is a China-reachable ModelScope mirror. The enforced
+checksum is the canonical `ggerganov/whisper.cpp` Hugging Face LFS checksum, so
+a mirror cannot silently supply different model bytes. Override only the URL
+when another transport path is required:
+
+```dotenv
+WHISPER_MODEL_URL=https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base-q5_1.bin
+```
+
+Alternatively, set `VS_ASR_PROVIDER=openai`, provide `OPENAI_API_KEY`, and
+optionally set `OPENAI_BASE_URL` to a compatible provider implementing
+`POST /audio/transcriptions`. The Relay sends a bounded 16 kHz mono WAV after
+endpointing; it does not retain raw audio.
 
 ## Start
 
