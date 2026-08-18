@@ -21,6 +21,8 @@ esp_err_t vs_board_set_output(bool enabled);
 void vs_board_set_status(bool active);
 void vs_board_display_set_state(const char *state);
 void vs_board_display_set_transcript(const char *text);
+void vs_board_display_set_connectivity(bool wifi_connected, bool cloud_connected);
+void vs_board_display_set_audio_level(uint32_t rms);
 
 #ifdef __cplusplus
 }

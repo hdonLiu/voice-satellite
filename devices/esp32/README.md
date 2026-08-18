@@ -23,11 +23,13 @@ playback cancels the turn. The `wakenet` profile runs WakeNet only while idle an
 uses local energy endpointing after detection. Both profiles speak identical
 Device Link v1 messages.
 
-The 320x240 display shows link/turn state and the latest
-`transcript.final`. The built-in LVGL Source Han Sans SC font covers 1,338
-common CJK characters. Unsupported uncommon glyphs fall back to a missing-glyph
-marker; dynamic server-pushed glyphs are intentionally deferred until the
-speech path is proven.
+The 320x240 display presents separate Wi-Fi and cloud connection progress,
+link/turn state, a live microphone level waveform, and the latest
+`transcript.final`. Its generated Source Han Sans fonts cover Latin text,
+general punctuation, full-width forms, and the complete CJK Unified Ideographs
+basic block (`U+4E00-U+9FFF`). Font generation is reproducible through
+`tools/generate-fonts.sh`; attribution and the SIL Open Font License are kept in
+`third_party/source-han-sans`.
 
 ## Configure and build
 

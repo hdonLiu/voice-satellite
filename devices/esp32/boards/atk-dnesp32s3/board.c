@@ -1,6 +1,7 @@
 #include "vs_board.h"
 
 #include <assert.h>
+#include <string.h>
 #include "board.h"
 #include "driver/gpio.h"
 #include "driver/i2c_master.h"
@@ -14,6 +15,8 @@
 #include "esp_lcd_panel_vendor.h"
 #include "esp_log.h"
 #include "esp_lvgl_port.h"
+#include "esp_timer.h"
+#include "fonts/fonts.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "freertos/task.h"
@@ -34,7 +37,20 @@ static QueueHandle_t button_queue;
 static vs_board_button_callback_t button_callback;
 static void *button_context;
 static lv_obj_t *display_state_label;
+static lv_obj_t *display_state_dot;
+static lv_obj_t *display_title_label;
+static lv_obj_t *display_card_title_label;
 static lv_obj_t *display_transcript_label;
+static lv_obj_t *display_wifi_dot;
+static lv_obj_t *display_wifi_label;
+static lv_obj_t *display_cloud_dot;
+static lv_obj_t *display_cloud_label;
+static lv_obj_t *display_orb;
+
+#define DISPLAY_WAVE_BAR_COUNT 15
+static lv_obj_t *display_wave_bars[DISPLAY_WAVE_BAR_COUNT];
+static int64_t display_last_level_update_us;
+static uint32_t display_smoothed_level;
 
 static esp_err_t xl9555_write(uint8_t reg, uint8_t value) {
     const uint8_t data[] = {reg, value};
@@ -66,35 +82,143 @@ static esp_err_t initialize_xl9555(void) {
     return xl9555_write(0x07, 0xF0);
 }
 
+static lv_obj_t *create_panel(lv_obj_t *parent) {
+    lv_obj_t *panel = lv_obj_create(parent);
+    lv_obj_remove_style_all(panel);
+    lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, 0);
+    return panel;
+}
+
+static void style_dot(lv_obj_t *dot, uint32_t color) {
+    lv_obj_set_style_bg_color(dot, lv_color_hex(color), 0);
+    lv_obj_set_style_shadow_color(dot, lv_color_hex(color), 0);
+    lv_obj_set_style_shadow_width(dot, 8, 0);
+    lv_obj_set_style_shadow_opa(dot, LV_OPA_50, 0);
+}
+
 static void initialize_display_ui(void) {
     lv_obj_t *screen = lv_screen_active();
-    lv_obj_set_style_bg_color(screen, lv_color_hex(0x101418), 0);
+    lv_obj_set_style_bg_color(screen, lv_color_hex(0x050B16), 0);
     lv_obj_set_style_bg_opa(screen, LV_OPA_COVER, 0);
-    lv_obj_set_style_text_font(screen, &lv_font_source_han_sans_sc_16_cjk, 0);
+    lv_obj_set_style_text_font(screen, &vs_font_cjk_16, 0);
 
-    lv_obj_t *header = lv_obj_create(screen);
-    lv_obj_remove_style_all(header);
-    lv_obj_set_size(header, ATK_LCD_WIDTH, 42);
-    lv_obj_set_style_bg_color(header, lv_color_hex(0x1677FF), 0);
-    lv_obj_set_style_bg_opa(header, LV_OPA_COVER, 0);
+    lv_obj_t *status_chip = create_panel(screen);
+    lv_obj_set_pos(status_chip, 8, 8);
+    lv_obj_set_size(status_chip, 132, 28);
+    lv_obj_set_style_bg_color(status_chip, lv_color_hex(0x0E1929), 0);
+    lv_obj_set_style_radius(status_chip, 14, 0);
+    lv_obj_set_style_border_width(status_chip, 1, 0);
+    lv_obj_set_style_border_color(status_chip, lv_color_hex(0x1C2B41), 0);
 
-    display_state_label = lv_label_create(header);
-    lv_label_set_text(display_state_label, "Starting");
-    lv_obj_set_style_text_color(display_state_label, lv_color_white(), 0);
-    lv_obj_align(display_state_label, LV_ALIGN_LEFT_MID, 14, 0);
+    display_state_dot = create_panel(status_chip);
+    lv_obj_set_size(display_state_dot, 8, 8);
+    lv_obj_set_style_radius(display_state_dot, LV_RADIUS_CIRCLE, 0);
+    style_dot(display_state_dot, 0x2F8CFF);
+    lv_obj_align(display_state_dot, LV_ALIGN_LEFT_MID, 10, 0);
 
-    lv_obj_t *title = lv_label_create(screen);
-    lv_label_set_text(title, "识别结果");
-    lv_obj_set_style_text_color(title, lv_color_hex(0x8CA0B3), 0);
-    lv_obj_align(title, LV_ALIGN_TOP_LEFT, 14, 56);
+    display_state_label = lv_label_create(status_chip);
+    lv_label_set_text(display_state_label, "启动中");
+    lv_obj_set_style_text_color(display_state_label, lv_color_hex(0xDCEBFF), 0);
+    lv_obj_align(display_state_label, LV_ALIGN_LEFT_MID, 27, 0);
 
-    display_transcript_label = lv_label_create(screen);
-    lv_label_set_text(display_transcript_label, "等待语音输入");
+    display_wifi_dot = create_panel(screen);
+    lv_obj_set_size(display_wifi_dot, 7, 7);
+    lv_obj_set_style_radius(display_wifi_dot, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_pos(display_wifi_dot, 184, 19);
+    display_wifi_label = lv_label_create(screen);
+    lv_label_set_text(display_wifi_label, "Wi-Fi");
+    lv_obj_set_style_text_color(display_wifi_label, lv_color_hex(0x73849A), 0);
+    lv_obj_set_pos(display_wifi_label, 196, 11);
+
+    display_cloud_dot = create_panel(screen);
+    lv_obj_set_size(display_cloud_dot, 7, 7);
+    lv_obj_set_style_radius(display_cloud_dot, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_pos(display_cloud_dot, 258, 19);
+    display_cloud_label = lv_label_create(screen);
+    lv_label_set_text(display_cloud_label, "云端");
+    lv_obj_set_style_text_color(display_cloud_label, lv_color_hex(0x73849A), 0);
+    lv_obj_set_pos(display_cloud_label, 270, 11);
+
+    lv_obj_t *halo = create_panel(screen);
+    lv_obj_set_size(halo, 80, 80);
+    lv_obj_align(halo, LV_ALIGN_TOP_MID, 0, 38);
+    lv_obj_set_style_bg_opa(halo, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_radius(halo, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_border_width(halo, 1, 0);
+    lv_obj_set_style_border_color(halo, lv_color_hex(0x174A89), 0);
+    lv_obj_set_style_border_opa(halo, LV_OPA_60, 0);
+
+    display_orb = create_panel(screen);
+    lv_obj_set_size(display_orb, 58, 58);
+    lv_obj_align(display_orb, LV_ALIGN_TOP_MID, 0, 49);
+    lv_obj_set_style_radius(display_orb, LV_RADIUS_CIRCLE, 0);
+    lv_obj_set_style_bg_color(display_orb, lv_color_hex(0x0B3A70), 0);
+    lv_obj_set_style_bg_grad_color(display_orb, lv_color_hex(0x137BDA), 0);
+    lv_obj_set_style_bg_grad_dir(display_orb, LV_GRAD_DIR_VER, 0);
+    lv_obj_set_style_border_width(display_orb, 2, 0);
+    lv_obj_set_style_border_color(display_orb, lv_color_hex(0x52B8FF), 0);
+    lv_obj_set_style_shadow_color(display_orb, lv_color_hex(0x1677FF), 0);
+    lv_obj_set_style_shadow_width(display_orb, 18, 0);
+    lv_obj_set_style_shadow_opa(display_orb, LV_OPA_50, 0);
+
+    lv_obj_t *orb_label = lv_label_create(display_orb);
+    lv_label_set_text(orb_label, "VOICE");
+    lv_obj_set_style_text_color(orb_label, lv_color_white(), 0);
+    lv_obj_center(orb_label);
+
+    display_title_label = lv_label_create(screen);
+    lv_label_set_text(display_title_label, "启动中");
+    lv_obj_set_style_text_font(display_title_label, &vs_font_ui_22, 0);
+    lv_obj_set_style_text_color(display_title_label, lv_color_white(), 0);
+    lv_obj_set_width(display_title_label, ATK_LCD_WIDTH - 20);
+    lv_obj_set_style_text_align(display_title_label, LV_TEXT_ALIGN_CENTER, 0);
+    lv_obj_align(display_title_label, LV_ALIGN_TOP_MID, 0, 112);
+
+    static const uint8_t initial_heights[DISPLAY_WAVE_BAR_COUNT] = {
+        3, 5, 8, 12, 8, 6, 4, 7, 4, 6, 8, 12, 8, 5, 3,
+    };
+    const int bar_width = 5;
+    const int bar_gap = 5;
+    const int wave_width = DISPLAY_WAVE_BAR_COUNT * bar_width +
+                           (DISPLAY_WAVE_BAR_COUNT - 1) * bar_gap;
+    const int wave_left = (ATK_LCD_WIDTH - wave_width) / 2;
+    for (size_t i = 0; i < DISPLAY_WAVE_BAR_COUNT; ++i) {
+        lv_obj_t *bar = create_panel(screen);
+        display_wave_bars[i] = bar;
+        lv_obj_set_size(bar, bar_width, initial_heights[i]);
+        lv_obj_set_pos(bar, wave_left + i * (bar_width + bar_gap),
+                       147 - initial_heights[i] / 2);
+        lv_obj_set_style_radius(bar, LV_RADIUS_CIRCLE, 0);
+        lv_obj_set_style_bg_color(bar, lv_color_hex(0x318DFF), 0);
+        lv_obj_set_style_bg_opa(bar, i == 0 || i == DISPLAY_WAVE_BAR_COUNT - 1
+                                        ? LV_OPA_40
+                                        : LV_OPA_COVER,
+                                0);
+    }
+
+    lv_obj_t *transcript_card = create_panel(screen);
+    lv_obj_set_pos(transcript_card, 9, 163);
+    lv_obj_set_size(transcript_card, 302, 69);
+    lv_obj_set_style_bg_color(transcript_card, lv_color_hex(0x0C1524), 0);
+    lv_obj_set_style_radius(transcript_card, 18, 0);
+    lv_obj_set_style_border_width(transcript_card, 1, 0);
+    lv_obj_set_style_border_color(transcript_card, lv_color_hex(0x1B2B42), 0);
+
+    display_card_title_label = lv_label_create(transcript_card);
+    lv_label_set_text(display_card_title_label, "连接状态");
+    lv_obj_set_style_text_color(display_card_title_label, lv_color_hex(0x3E9BFF), 0);
+    lv_obj_set_pos(display_card_title_label, 14, 7);
+
+    display_transcript_label = lv_label_create(transcript_card);
+    lv_label_set_text(display_transcript_label, "正在准备设备…");
     lv_label_set_long_mode(display_transcript_label, LV_LABEL_LONG_WRAP);
-    lv_obj_set_width(display_transcript_label, ATK_LCD_WIDTH - 28);
-    lv_obj_set_style_text_color(display_transcript_label, lv_color_white(), 0);
-    lv_obj_set_style_text_line_space(display_transcript_label, 7, 0);
-    lv_obj_align(display_transcript_label, LV_ALIGN_TOP_LEFT, 14, 86);
+    lv_obj_set_size(display_transcript_label, 274, 36);
+    lv_obj_set_style_text_color(display_transcript_label, lv_color_hex(0xF2F7FF), 0);
+    lv_obj_set_style_text_line_space(display_transcript_label, 3, 0);
+    lv_obj_set_pos(display_transcript_label, 14, 29);
+
+    style_dot(display_wifi_dot, 0x5C6B80);
+    style_dot(display_cloud_dot, 0x5C6B80);
 }
 
 static esp_err_t initialize_display(void) {
@@ -353,14 +477,130 @@ void vs_board_set_status(bool active) {
     gpio_set_level(ATK_STATUS_LED, active ? 1 : 0);
 }
 
+static void set_ui_accent(uint32_t color, uint32_t deep_color) {
+    style_dot(display_state_dot, color);
+    lv_obj_set_style_bg_color(display_orb, lv_color_hex(deep_color), 0);
+    lv_obj_set_style_bg_grad_color(display_orb, lv_color_hex(color), 0);
+    lv_obj_set_style_border_color(display_orb, lv_color_hex(color), 0);
+    lv_obj_set_style_shadow_color(display_orb, lv_color_hex(color), 0);
+    lv_obj_set_style_text_color(display_card_title_label, lv_color_hex(color), 0);
+    for (size_t i = 0; i < DISPLAY_WAVE_BAR_COUNT; ++i)
+        lv_obj_set_style_bg_color(display_wave_bars[i], lv_color_hex(color), 0);
+}
+
 void vs_board_display_set_state(const char *state) {
     if (!display_state_label || !state || !lvgl_port_lock(100)) return;
-    lv_label_set_text(display_state_label, state);
+
+    const char *chip = "启动中";
+    const char *title = "启动中";
+    const char *card = "连接状态";
+    uint32_t accent = 0x2F8CFF;
+    uint32_t deep = 0x0B3A70;
+
+    if (!strcmp(state, "Provisioning")) {
+        chip = "等待配置";
+        title = "等待设备配置";
+        accent = 0xFFAA33;
+        deep = 0x6A3A08;
+    } else if (!strcmp(state, "WiFiConnecting")) {
+        chip = "连接网络";
+        title = "正在连接网络";
+        accent = 0xFFAA33;
+        deep = 0x6A3A08;
+    } else if (!strcmp(state, "CloudConnecting")) {
+        chip = "连接云端";
+        title = "正在连接云端";
+        accent = 0xFFAA33;
+        deep = 0x6A3A08;
+    } else if (!strcmp(state, "Ready")) {
+        chip = "准备就绪";
+        title = "按住说话";
+        card = "使用提示";
+        accent = 0x39D98A;
+        deep = 0x075A45;
+    } else if (!strcmp(state, "Listening")) {
+        chip = "聆听中";
+        title = "我在听…";
+        card = "你说：";
+    } else if (!strcmp(state, "Recognizing")) {
+        chip = "识别中";
+        title = "正在识别…";
+        card = "你说：";
+        accent = 0xFFB84D;
+        deep = 0x6A3A08;
+    } else if (!strcmp(state, "Forwarding")) {
+        chip = "转发中";
+        title = "正在转发…";
+        card = "你说：";
+        accent = 0x8C6CFF;
+        deep = 0x35206E;
+    } else if (!strcmp(state, "Recognized")) {
+        chip = "已识别";
+        title = "识别完成";
+        card = "你说：";
+        accent = 0x39D98A;
+        deep = 0x075A45;
+    } else if (!strcmp(state, "Speaking")) {
+        chip = "语音输出";
+        title = "我在说…";
+        card = "AI 回答：";
+        accent = 0xB45CFF;
+        deep = 0x4A176D;
+    } else if (!strcmp(state, "Offline")) {
+        chip = "云端离线";
+        title = "云端重连中";
+        accent = 0xFFAA33;
+        deep = 0x6A3A08;
+    } else if (!strcmp(state, "Error")) {
+        chip = "连接失败";
+        title = "连接失败";
+        accent = 0xFF5D73;
+        deep = 0x701C31;
+    }
+
+    lv_label_set_text(display_state_label, chip);
+    lv_label_set_text(display_title_label, title);
+    lv_label_set_text(display_card_title_label, card);
+    set_ui_accent(accent, deep);
     lvgl_port_unlock();
 }
 
 void vs_board_display_set_transcript(const char *text) {
     if (!display_transcript_label || !text || !lvgl_port_lock(100)) return;
     lv_label_set_text(display_transcript_label, text);
+    lvgl_port_unlock();
+}
+
+void vs_board_display_set_connectivity(bool wifi_connected, bool cloud_connected) {
+    if (!display_wifi_dot || !lvgl_port_lock(100)) return;
+
+    uint32_t wifi_color = wifi_connected ? 0x39D98A : 0xFFAA33;
+    uint32_t cloud_color = cloud_connected ? 0x39D98A
+                                           : (wifi_connected ? 0xFFAA33 : 0x5C6B80);
+    style_dot(display_wifi_dot, wifi_color);
+    style_dot(display_cloud_dot, cloud_color);
+    lv_obj_set_style_text_color(display_wifi_label, lv_color_hex(wifi_color), 0);
+    lv_obj_set_style_text_color(display_cloud_label, lv_color_hex(cloud_color), 0);
+    lvgl_port_unlock();
+}
+
+void vs_board_display_set_audio_level(uint32_t rms) {
+    if (!display_wave_bars[0]) return;
+    int64_t now = esp_timer_get_time();
+    if (rms > 0 && now - display_last_level_update_us < 80000) return;
+    display_last_level_update_us = now;
+    display_smoothed_level = rms == 0 ? 0 : (display_smoothed_level * 2 + rms) / 3;
+    uint32_t amplitude = display_smoothed_level * 18 / 3000;
+    if (amplitude > 18) amplitude = 18;
+    static const uint8_t weights[DISPLAY_WAVE_BAR_COUNT] = {
+        2, 4, 6, 8, 6, 5, 7, 10, 7, 5, 6, 8, 6, 4, 2,
+    };
+
+    if (!lvgl_port_lock(5)) return;
+    for (size_t i = 0; i < DISPLAY_WAVE_BAR_COUNT; ++i) {
+        int height = 3 + (int)(amplitude * weights[i] / 10);
+        lv_obj_set_height(display_wave_bars[i], height);
+        lv_obj_set_y(display_wave_bars[i], 147 - height / 2);
+    }
     lvgl_port_unlock();
 }

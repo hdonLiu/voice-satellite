@@ -196,10 +196,11 @@ static void audio_sender_task(void *context) {
 static void monitored_audio(const int16_t *samples, size_t count, void *context) {
     (void)context;
     vs_wake_feed(samples, count);
+    uint32_t level = vs_audio_rms(samples, count);
+    if (atomic_load(&device.capture_active)) vs_board_display_set_audio_level(level);
 #if CONFIG_VS_PROFILE_WAKENET
     if (!atomic_load(&device.capture_active)) return;
     device.capture_frames++;
-    uint32_t level = vs_audio_rms(samples, count);
     if (level >= 700) {
         device.speech_seen = true;
         device.silence_frames = 0;
@@ -246,6 +247,7 @@ static void set_idle(void) {
     device.turn_terminal_received = false;
     vs_board_set_output(false);
     vs_board_set_status(false);
+    vs_board_display_set_audio_level(0);
     vs_board_display_set_state(device.state == DEVICE_IDLE ? "Ready" : "Offline");
 #if CONFIG_VS_PROFILE_WAKENET
     vs_wake_set_enabled(device.state == DEVICE_IDLE);
@@ -283,6 +285,7 @@ static esp_err_t begin_capture(void) {
     vs_wake_set_enabled(false);
     vs_audio_set_capture(true);
     vs_board_set_status(true);
+    vs_board_display_set_audio_level(0);
     vs_board_display_set_state("Listening");
     esp_timer_stop(device.capture_timer);
     esp_timer_start_once(device.capture_timer, CONFIG_VS_MAX_CAPTURE_MS * 1000ULL);
@@ -297,6 +300,7 @@ static void end_capture(void) {
     vs_audio_set_capture(false);
     esp_timer_stop(device.capture_timer);
     device.state = DEVICE_WAITING;
+    vs_board_display_set_audio_level(0);
     vs_board_display_set_state("Recognizing");
     outgoing_audio_t sentinel = {
         .end = true,
@@ -384,7 +388,13 @@ static void process_control(const uint8_t *data, size_t size) {
         strlcpy(device.control.conversation_id, conversation, sizeof(device.control.conversation_id));
         device.control.next_outgoing_seq = 1;
         ESP_LOGI(TAG, "relay connected");
+        vs_board_display_set_connectivity(true, true);
         set_idle();
+#if CONFIG_VS_PROFILE_WAKENET
+        vs_board_display_set_transcript("说出唤醒词后开始讲话");
+#else
+        vs_board_display_set_transcript("按住 BOOT 键说话");
+#endif
     } else if (!strcmp(type, "turn.state")) {
         const char *state = vs_json_string(payload, "state");
         if (state && !strcmp(state, "SPEAKING")) {
@@ -467,10 +477,15 @@ static void controller_task(void *context) {
     while (xQueueReceive(device.events, &event, portMAX_DELAY) == pdTRUE) {
         switch (event.type) {
             case EVENT_LINK_CONNECTED:
+                vs_board_display_set_connectivity(true, false);
+                vs_board_display_set_state("CloudConnecting");
+                vs_board_display_set_transcript("Wi-Fi 已连接，正在连接云端…");
                 vs_control_init(&device.control);
                 send_json(vs_control_device_hello(CONFIG_VS_PHYSICAL_APPROVAL));
                 break;
             case EVENT_LINK_DISCONNECTED:
+                vs_board_display_set_connectivity(true, false);
+                vs_board_display_set_transcript("连接中断，正在重新连接云端…");
                 device.control.connection_id[0] = '\0';
                 stop_capture();
                 vs_audio_stop_playback();
@@ -528,16 +543,16 @@ esp_err_t vs_device_start(void) {
         vs_board_display_set_transcript("等待串口安全配置");
         ESP_RETURN_ON_ERROR(vs_storage_provision_serial(&device.config), TAG, "serial provisioning");
     }
-    vs_board_display_set_state("Connecting");
-#if CONFIG_VS_PROFILE_WAKENET
-    vs_board_display_set_transcript("说出唤醒词后开始讲话");
-#else
-    vs_board_display_set_transcript("按住 BOOT 键说话");
-#endif
+    vs_board_display_set_connectivity(false, false);
+    vs_board_display_set_state("WiFiConnecting");
+    vs_board_display_set_transcript("正在连接 Wi-Fi…");
     ESP_RETURN_ON_ERROR(vs_wake_init(wake_detected, &device), TAG, "wake");
     ESP_RETURN_ON_ERROR(vs_audio_init(captured_audio, monitored_audio, playback_drained, &device), TAG, "audio");
     ESP_RETURN_ON_ERROR(vs_transport_wifi_connect(device.config.wifi_ssid,
                                                    device.config.wifi_password, 30000), TAG, "wifi");
+    vs_board_display_set_connectivity(true, false);
+    vs_board_display_set_state("CloudConnecting");
+    vs_board_display_set_transcript("Wi-Fi 已连接，正在连接云端…");
     if (xTaskCreate(controller_task, "vs_controller", 8192, NULL, 10, NULL) != pdPASS)
         return ESP_ERR_NO_MEM;
     if (xTaskCreate(audio_sender_task, "vs_audio_sender", 4096, NULL, 8, NULL) != pdPASS)
