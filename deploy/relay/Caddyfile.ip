@@ -5,8 +5,16 @@
 
 https://{$VS_PUBLIC_HOST} {
 	tls /etc/letsencrypt/live/{$VS_PUBLIC_HOST}/fullchain.pem /etc/letsencrypt/live/{$VS_PUBLIC_HOST}/privkey.pem
-	encode zstd gzip
-	reverse_proxy relay:8787
+
+	handle /.well-known/acme-challenge/* {
+		root * /srv/acme
+		file_server
+	}
+
+	handle {
+		encode zstd gzip
+		reverse_proxy relay:8787
+	}
 
 	log {
 		output stdout

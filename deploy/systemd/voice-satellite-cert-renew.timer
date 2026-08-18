@@ -1,0 +1,11 @@
+[Unit]
+Description=Check the Voice Satellite public IP certificate twice daily
+
+[Timer]
+OnCalendar=*-*-* 02,14:17:00
+RandomizedDelaySec=45m
+Persistent=true
+Unit=voice-satellite-cert-renew.service
+
+[Install]
+WantedBy=timers.target

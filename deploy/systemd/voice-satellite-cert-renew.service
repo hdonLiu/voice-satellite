@@ -1,0 +1,10 @@
+[Unit]
+Description=Renew the Voice Satellite public IP certificate
+After=docker.service network-online.target
+Wants=docker.service network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=/etc/voice-satellite/cert-renew.env
+ExecStart=/usr/bin/docker run --rm --network host --volume /etc/letsencrypt:/etc/letsencrypt:Z --volume ${VS_ACME_WEBROOT}:/srv/acme:Z certbot/certbot:v5.7.0 renew --non-interactive --quiet
+ExecStartPost=/usr/bin/docker kill --signal=USR1 ${VS_CADDY_CONTAINER}

@@ -5,3 +5,4 @@ services:
     volumes:
       - ./relay/Caddyfile.ip:/etc/caddy/Caddyfile:ro
       - ${VS_LETSENCRYPT_DIR:-/etc/letsencrypt}:/etc/letsencrypt:ro
+      - ${VS_ACME_WEBROOT:-/var/lib/voice-satellite/acme}:/srv/acme:ro

@@ -55,6 +55,7 @@ identifiers and the `shortlived` profile. Set these additional values:
 ```dotenv
 VS_PUBLIC_HOST=203.0.113.10
 VS_LETSENCRYPT_DIR=/etc/letsencrypt
+VS_ACME_WEBROOT=/var/lib/voice-satellite/acme
 ```
 
 Then start Compose with the IP override:
@@ -66,9 +67,28 @@ curl --fail --show-error https://203.0.113.10/healthz
 ```
 
 The Let's Encrypt directory is mounted read-only into Caddy so the `live/`
-links can resolve into `archive/`. Because IP certificates are valid for about
-six days, renewal and a Caddy reload are a required part of this mode; do not
-treat a one-time issuance as a deployment.
+links can resolve into `archive/`. The ACME webroot is also mounted read-only
+into Caddy and is the only path served without proxying to Relay.
+
+After the ACME client has been configured to renew with that webroot, install
+the included timer. The environment file contains no Device credential:
+
+```bash
+sudo install -d -m 0755 /etc/voice-satellite
+sudo install -m 0600 deploy/systemd/cert-renew.env.example \
+  /etc/voice-satellite/cert-renew.env
+sudo install -m 0644 deploy/systemd/voice-satellite-cert-renew.service \
+  /etc/systemd/system/
+sudo install -m 0644 deploy/systemd/voice-satellite-cert-renew.timer \
+  /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now voice-satellite-cert-renew.timer
+```
+
+The timer checks twice daily and sends `SIGUSR1` to Caddy after a successful
+Certbot run so manually loaded certificate files are reprovisioned. Because IP
+certificates are valid for about six days, do not treat one-time issuance as a
+deployment.
 
 In `device-link` mode, `/healthz` reports `mode: "device-link"` and
 `connectorReady: false`. A completed device turn writes a structured
