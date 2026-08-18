@@ -23,6 +23,11 @@ playback cancels the turn. The `wakenet` profile runs WakeNet only while idle an
 uses local energy endpointing after detection. Both profiles speak identical
 Device Link v1 messages.
 
+The outgoing audio queue is allocated in PSRAM and sized to the configured
+maximum capture duration. This keeps the queue bounded while allowing a public
+WSS link to drain more slowly than the microphone's real-time 20 ms frame rate
+without truncating the recording.
+
 The 320x240 display presents separate Wi-Fi and cloud connection progress,
 link/turn state, a live microphone level waveform, and the latest
 `transcript.final`. Its generated Source Han Sans fonts cover Latin text,

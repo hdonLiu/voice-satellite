@@ -87,7 +87,11 @@ static StaticQueue_t outgoing_audio_queue_control;
 static uint8_t *outgoing_audio_queue_storage;
 static void cancel_turn(void);
 
-#define OUTGOING_AUDIO_QUEUE_FRAMES 25
+// Sending one WebSocket message per 20 ms audio frame can be slower than real
+// time on a high-latency public link. Keep the complete bounded capture window
+// in PSRAM so capture never truncates merely because the network is draining
+// more slowly than the microphone produces frames.
+#define OUTGOING_AUDIO_QUEUE_FRAMES (((CONFIG_VS_MAX_CAPTURE_MS + 19) / 20) + 1)
 
 static void post_event_wait(device_event_type_t type, const void *data, size_t size,
                             TickType_t wait) {
@@ -172,8 +176,10 @@ static void captured_audio(const int16_t *samples, size_t count, void *context) 
     if (xQueueSend(device.outgoing_audio, &packet, 0) != pdTRUE) {
         xSemaphoreGive(device.capture_mutex);
         bool expected = false;
-        if (atomic_compare_exchange_strong(&device.endpoint_queued, &expected, true))
+        if (atomic_compare_exchange_strong(&device.endpoint_queued, &expected, true)) {
+            ESP_LOGW(TAG, "outgoing audio queue saturated; ending capture");
             post_event(EVENT_ENDPOINT, NULL, 0);
+        }
         return;
     }
     xSemaphoreGive(device.capture_mutex);
