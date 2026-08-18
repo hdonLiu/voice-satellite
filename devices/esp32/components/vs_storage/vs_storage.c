@@ -6,6 +6,8 @@
 #include "nvs.h"
 #include "nvs_flash.h"
 #include "esp_check.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 static esp_err_t read_string(nvs_handle_t handle, const char *key, char *value,
                              size_t capacity, const char *fallback) {
@@ -67,15 +69,52 @@ bool vs_storage_is_provisioned(const vs_device_config_t *config) {
 
 esp_err_t vs_storage_provision_serial(vs_device_config_t *config) {
     if (!config) return ESP_ERR_INVALID_ARG;
-    char line[768];
+    char line[768] = {0};
+    size_t line_size = 0;
+    bool overflow = false;
     printf("VS_PROVISION_READY\n");
     fflush(stdout);
-    while (fgets(line, sizeof(line), stdin)) {
+    while (true) {
+        int input = fgetc(stdin);
+        if (input == EOF) {
+            // The ESP-IDF console VFS is non-blocking until a byte arrives.
+            clearerr(stdin);
+            vTaskDelay(pdMS_TO_TICKS(20));
+            continue;
+        }
+        if (input == '\r') continue;
+        if (input != '\n') {
+            if (overflow) continue;
+            if (line_size + 1 >= sizeof(line)) {
+                overflow = true;
+            } else {
+                line[line_size++] = (char)input;
+            }
+            continue;
+        }
+        if (line_size == 0 && !overflow) continue;
+        if (overflow) {
+            memset(line, 0, sizeof(line));
+            line_size = 0;
+            overflow = false;
+            printf("VS_PROVISION_INVALID\n");
+            fflush(stdout);
+            continue;
+        }
+        line[line_size] = '\0';
         cJSON *root = cJSON_Parse(line);
-        const cJSON *relay_url = cJSON_GetObjectItemCaseSensitive(root, "relayUrl");
-        const cJSON *device_token = cJSON_GetObjectItemCaseSensitive(root, "deviceToken");
-        const cJSON *wifi_ssid = cJSON_GetObjectItemCaseSensitive(root, "wifiSsid");
-        const cJSON *wifi_password = cJSON_GetObjectItemCaseSensitive(root, "wifiPassword");
+        const cJSON *relay_url = cJSON_IsObject(root)
+                                     ? cJSON_GetObjectItemCaseSensitive(root, "relayUrl")
+                                     : NULL;
+        const cJSON *device_token = cJSON_IsObject(root)
+                                       ? cJSON_GetObjectItemCaseSensitive(root, "deviceToken")
+                                       : NULL;
+        const cJSON *wifi_ssid = cJSON_IsObject(root)
+                                     ? cJSON_GetObjectItemCaseSensitive(root, "wifiSsid")
+                                     : NULL;
+        const cJSON *wifi_password = cJSON_IsObject(root)
+                                         ? cJSON_GetObjectItemCaseSensitive(root, "wifiPassword")
+                                         : NULL;
         bool valid = cJSON_IsObject(root) && cJSON_IsString(relay_url) &&
                      cJSON_IsString(device_token) && relay_url->valuestring[0] &&
                      device_token->valuestring[0] &&
@@ -104,9 +143,8 @@ esp_err_t vs_storage_provision_serial(vs_device_config_t *config) {
         }
         cJSON_Delete(root);
         memset(line, 0, sizeof(line));
+        line_size = 0;
         printf("VS_PROVISION_INVALID\n");
         fflush(stdout);
     }
-    memset(line, 0, sizeof(line));
-    return ESP_FAIL;
 }
