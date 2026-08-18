@@ -1,1 +1,5 @@
-idf_component_register(SRCS "vs_audio.c" INCLUDE_DIRS "include" REQUIRES vs_board)
+idf_component_register(
+  SRCS "vs_audio.c"
+  INCLUDE_DIRS "include"
+  REQUIRES vs_board espressif__esp_audio_effects
+)
