@@ -58,15 +58,19 @@ and exit gates remain in the
 - the firmware stores the bounded maximum capture window in PSRAM while
   retaining an internal DMA reserve; both PTT and WakeNet profiles pass CI
 
-The WakeNet endpointing and wake-to-cancel changes are implemented locally but
-are not included in the deployment and hardware verification claims above until
-the updated Relay is deployed and the updated firmware passes a physical turn.
+- Relay-side WakeNet endpointing is deployed from commit `a8001c1`; an
+  authenticated public WSS smoke turn received `turn.input_stop(no_speech)`
+  followed by the single terminal `turn.error(cancelled)`. The updated WakeNet
+  firmware builds in CI but is not yet included in the physical-turn evidence
+  above.
 
 ## Pending qualification and later integration
 
 - tune microphone acoustics/codec gain and qualify recognition accuracy with a
   human speaker; the automated room-capture test proved routing but produced
   low-quality recognition text
+- flash the updated WakeNet image and qualify speech-end, no-speech, maximum
+  duration, and second-wake cancellation on the physical board
 - qualify WakeNet model selection, long-run DMA/Wi-Fi stability, reconnect,
   latency, and 50-turn acceptance
 - connect the replaceable Agent/Connector path to the separately hosted
