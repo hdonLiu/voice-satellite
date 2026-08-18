@@ -51,8 +51,12 @@ and exit gates remain in the
   `ESP32 -> WSS -> Relay -> ASR -> transcript.final -> ESP32 display path`, and
   both results were published to the transcript sink; Relay production logs
   record metadata and character counts without recording transcript bodies
-- the final firmware stores large audio queues in PSRAM while retaining a
-  bounded internal DMA reserve; both PTT and WakeNet profiles pass CI
+- the current full-CJK voice UI/PTT build was flashed to the physical board;
+  its automated room-playback turn delivered 8.3 seconds of microphone audio
+  to whisper.cpp, returned a non-empty Chinese transcript to the display, and
+  completed without saturating the device upload queue
+- the firmware stores the bounded maximum capture window in PSRAM while
+  retaining an internal DMA reserve; both PTT and WakeNet profiles pass CI
 
 ## Pending qualification and later integration
 
