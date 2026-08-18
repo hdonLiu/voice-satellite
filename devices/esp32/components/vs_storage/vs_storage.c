@@ -1,6 +1,7 @@
 #include "vs_storage.h"
 
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 #include "cJSON.h"
 #include "nvs.h"
@@ -8,6 +9,8 @@
 #include "esp_check.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+
+static const char *TAG = "vs_storage";
 
 static esp_err_t read_string(nvs_handle_t handle, const char *key, char *value,
                              size_t capacity, const char *fallback) {
@@ -116,18 +119,22 @@ esp_err_t vs_storage_provision_serial(vs_device_config_t *config) {
         const cJSON *wifi_password = cJSON_IsObject(root)
                                          ? cJSON_GetObjectItemCaseSensitive(root, "wifiPassword")
                                          : NULL;
-        bool valid = cJSON_IsObject(root) && cJSON_IsString(relay_url) &&
-                     cJSON_IsString(device_token) && relay_url->valuestring[0] &&
-                     device_token->valuestring[0] &&
-                     ((cJSON_IsString(wifi_ssid) && wifi_ssid->valuestring[0]) ||
-                      config->wifi_ssid[0]) &&
-                     strlen(relay_url->valuestring) < sizeof(config->relay_url) &&
-                     strlen(device_token->valuestring) < sizeof(config->device_token) &&
-                     (!wifi_ssid || (cJSON_IsString(wifi_ssid) &&
-                                     strlen(wifi_ssid->valuestring) < sizeof(config->wifi_ssid))) &&
-                     (!wifi_password || (cJSON_IsString(wifi_password) &&
-                                         strlen(wifi_password->valuestring) <
-                                             sizeof(config->wifi_password)));
+        bool relay_valid = cJSON_IsString(relay_url) && relay_url->valuestring[0] &&
+                           strlen(relay_url->valuestring) < sizeof(config->relay_url);
+        bool token_valid = cJSON_IsString(device_token) &&
+                           device_token->valuestring[0] &&
+                           strlen(device_token->valuestring) <
+                               sizeof(config->device_token);
+        bool wifi_valid = ((cJSON_IsString(wifi_ssid) && wifi_ssid->valuestring[0]) ||
+                           config->wifi_ssid[0]) &&
+                          (!wifi_ssid ||
+                           (cJSON_IsString(wifi_ssid) &&
+                            strlen(wifi_ssid->valuestring) < sizeof(config->wifi_ssid))) &&
+                          (!wifi_password ||
+                           (cJSON_IsString(wifi_password) &&
+                            strlen(wifi_password->valuestring) <
+                                sizeof(config->wifi_password)));
+        bool valid = cJSON_IsObject(root) && relay_valid && token_valid && wifi_valid;
         if (valid) {
             strlcpy(config->relay_url, relay_url->valuestring, sizeof(config->relay_url));
             strlcpy(config->device_token, device_token->valuestring,
@@ -144,6 +151,17 @@ esp_err_t vs_storage_provision_serial(vs_device_config_t *config) {
             fflush(stdout);
             return result;
         }
+        ESP_LOGW(TAG,
+                 "provisioning rejected: bytes=%u first=0x%02x last=0x%02x "
+                 "json=%d relay=%d token=%d wifi=%d lengths=%u/%u/%u/%u",
+                 (unsigned)line_size, (unsigned)(uint8_t)line[0],
+                 (unsigned)(uint8_t)line[line_size - 1], cJSON_IsObject(root),
+                 relay_valid, token_valid, wifi_valid,
+                 cJSON_IsString(relay_url) ? (unsigned)strlen(relay_url->valuestring) : 0,
+                 cJSON_IsString(device_token) ? (unsigned)strlen(device_token->valuestring) : 0,
+                 cJSON_IsString(wifi_ssid) ? (unsigned)strlen(wifi_ssid->valuestring) : 0,
+                 cJSON_IsString(wifi_password) ?
+                     (unsigned)strlen(wifi_password->valuestring) : 0);
         cJSON_Delete(root);
         memset(line, 0, sizeof(line));
         line_size = 0;
