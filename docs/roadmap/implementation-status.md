@@ -1,7 +1,7 @@
 # Implementation status
 
-- Updated: 2026-08-13
-- Stage: v1 implementation complete; deployment and hardware qualification pending
+- Updated: 2026-08-18
+- Stage: device-to-cloud transcription path verified; Agent integration pending
 
 This file records implemented behavior, not planned behavior. Task definitions
 and exit gates remain in the
@@ -26,22 +26,49 @@ and exit gates remain in the
   `openclaw acp` stdio, including session mapping, deltas, cancellation, filtered
   status, physical permissions, bounded ACP lines, and child shutdown
 - ESP-IDF firmware organized behind a board port, with ATK-DNESP32S3 ES8388,
-  24-to-16 kHz capture conversion, bounded playback, PTT, optional WakeNet,
-  energy endpointing, NVS config, TLS verification, and physical approval
+  ST7789/LVGL transcript display, 24-to-16 kHz capture conversion, bounded
+  playback, PTT, optional WakeNet, energy endpointing, NVS config, Wi-Fi,
+  verified TLS/WSS, reconnect, and physical approval
+- a strongly typed `TranscriptSinkPort` that receives the recognized text with
+  its device, conversation, and turn identifiers, independently of the future
+  Agent adapter
 - clean ESP-IDF 5.5.2 CI builds for both the dependency-light PTT profile and
   the ESP-SR WakeNet profile
 - deterministic fake speech/agent/device components and tests covering 100 turns,
   cancellation, permission denial, provider HTTP contracts, fake ACP, persistence,
   and a real WebSocket audio-to-audio network loop
 
-## Pending deployment, qualification, and release decisions
+## Verified deployment and hardware path
 
-- flash and qualify the physical ATK board (codec gain, acoustic thresholds,
-  WakeNet model selection, long-run DMA and Wi-Fi stability)
-- provide actual domain/TLS termination, credentials, OpenAI account settings,
-  and service managers on the chosen hosts
-- perform real OpenClaw, ASR/TTS, latency, reconnect, and 50-turn acceptance runs
+- Relay deployed on a TencentOS CVM behind HTTPS/WSS termination, in
+  transcription-only mode with self-hosted whisper.cpp ASR
+- public health check and an authenticated, synthetic PCM-over-WSS Chinese ASR
+  turn completed successfully
+- physical ATK-DNESP32S3 boots with its retained NVS provisioning, initializes
+  the ST7789 display and ES8388 codec, joins Wi-Fi, validates the public server
+  certificate, and completes the Device Link handshake
+- two real board-microphone turns completed through
+  `ESP32 -> WSS -> Relay -> ASR -> transcript.final -> ESP32 display path`, and
+  both results were published to the transcript sink; Relay production logs
+  record metadata and character counts without recording transcript bodies
+- the final firmware stores large audio queues in PSRAM while retaining a
+  bounded internal DMA reserve; both PTT and WakeNet profiles pass CI
+
+## Pending qualification and later integration
+
+- tune microphone acoustics/codec gain and qualify recognition accuracy with a
+  human speaker; the automated room-capture test proved routing but produced
+  low-quality recognition text
+- qualify WakeNet model selection, long-run DMA/Wi-Fi stability, reconnect,
+  latency, and 50-turn acceptance
+- connect the replaceable Agent/Connector path to the separately hosted
+  OpenClaw installation; this is intentionally outside the current
+  device-to-cloud milestone
+- select a production domain and certificate rather than retaining IP-address
+  TLS as the long-term endpoint
+- perform real TTS/playback acceptance after the Agent path is enabled
 - choose and implement the release/OTA signing and distribution policy
 
-No credentials or deployment decisions are committed to the repository. The
-firmware is never flashed automatically.
+No credentials are committed to the repository. Physical flashing and
+provisioning remain explicit operator actions; CI only builds and validates the
+firmware artifacts.
