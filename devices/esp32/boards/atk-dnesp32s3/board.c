@@ -76,8 +76,17 @@ static esp_err_t initialize_xl9555(void) {
     };
     ESP_RETURN_ON_ERROR(i2c_master_bus_add_device(i2c_bus, &config, &xl9555), TAG,
                         "xl9555 device");
-    ESP_RETURN_ON_ERROR(xl9555_write(0x06, 0x03), TAG, "xl9555 config 0");
-    return xl9555_write(0x07, 0xF0);
+    esp_err_t result = ESP_FAIL;
+    for (int attempt = 1; attempt <= 3; ++attempt) {
+        result = xl9555_write(0x06, 0x03);
+        if (result == ESP_OK) result = xl9555_write(0x07, 0xF0);
+        if (result == ESP_OK) return ESP_OK;
+        ESP_LOGW(TAG, "XL9555 did not answer (attempt %d/3): %s", attempt,
+                 esp_err_to_name(result));
+        ESP_RETURN_ON_ERROR(i2c_master_bus_reset(i2c_bus), TAG, "i2c bus recovery");
+        vTaskDelay(pdMS_TO_TICKS(50));
+    }
+    return result;
 }
 
 static lv_obj_t *create_panel(lv_obj_t *parent) {
@@ -348,7 +357,10 @@ static esp_err_t initialize_i2c(void) {
         .glitch_ignore_cnt = 7,
         .flags.enable_internal_pullup = true,
     };
-    return i2c_new_master_bus(&config, &i2c_bus);
+    ESP_RETURN_ON_ERROR(i2c_new_master_bus(&config, &i2c_bus), TAG, "new i2c bus");
+    ESP_RETURN_ON_ERROR(i2c_master_bus_reset(i2c_bus), TAG, "initial i2c bus recovery");
+    vTaskDelay(pdMS_TO_TICKS(20));
+    return ESP_OK;
 }
 
 static esp_err_t initialize_i2s(void) {
