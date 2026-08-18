@@ -31,6 +31,7 @@ Forbidden dependencies:
 
 ```text
 DeviceGateway ─────┐
+ServerEndpointer ──┤
 StreamingAsrPort ──┤
 AgentPort ─────────┼──> TurnOrchestrator ──> TurnRegistry
 StreamingTtsPort ──┤
@@ -43,6 +44,10 @@ Stable ports:
 - `StreamingTtsPort`
 - `AgentPort`
 - `DeviceOutputPort`
+
+`ServerEndpointer` is a bounded Relay application component over the fixed PCM
+baseline. It owns no device GPIO or ASR-provider behavior and can later be
+replaced by a qualified VAD implementation without changing Device Link.
 
 `AgentPort` is the only application boundary from Relay to Connector. Its v1
 WSS adapter speaks Connector Link. `TurnRegistry` is an in-memory application

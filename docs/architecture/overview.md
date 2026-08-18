@@ -17,7 +17,7 @@ machine, and Device Link v1. It exposes no OpenClaw or speech-provider concepts.
 Primary responsibilities:
 
 - ES8388 audio capture and playback
-- push-to-talk and optional local WakeNet/VAD
+- push-to-talk and optional local WakeNet
 - WSS connection, authentication, audio framing, and reconnect
 - bounded capture/playback buffers
 - display and physical-button interaction
@@ -50,16 +50,19 @@ adapter. Exactly one adapter is active per Connector.
 
 1. The device detects a button press or wake word and creates a turn.
 2. It sends `turn.start` and streams PCM frames to the Relay.
-3. Local VAD or push-to-talk completion sends `turn.input_end`.
-4. Relay ASR emits a final transcript.
-5. Relay sends a narrow `agent.run` command to the authorized Connector.
-6. Connector maps the logical conversation to its configured AgentRuntime
+3. PTT completion sends `turn.input_end`; a WakeNet turn asks Relay to own
+   endpointing and keeps streaming.
+4. Relay ends server-owned input after speech plus trailing silence, cancels a
+   no-speech turn, or stops at the bounded maximum duration.
+5. Relay ASR emits a final transcript.
+6. Relay sends a narrow `agent.run` command to the authorized Connector.
+7. Connector maps the logical conversation to its configured AgentRuntime
    session and prompts it.
-7. Connector filters native runtime updates into semantic agent events.
-8. Relay segments monotonic text deltas and starts TTS before the whole answer is
+8. Connector filters native runtime updates into semantic agent events.
+9. Relay segments monotonic text deltas and starts TTS before the whole answer is
    complete.
-9. The device buffers and plays the returned PCM audio.
-10. Completion, cancellation, or failure moves the turn to a terminal state.
+10. The device buffers and plays the returned PCM audio.
+11. Completion, cancellation, or failure moves the turn to a terminal state.
 
 ## Trust boundaries
 

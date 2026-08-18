@@ -29,7 +29,8 @@ WakeDetected                       firmware local
 turn.start                         device -> relay
 turn.accepted                      relay -> device
 audio frames                       device -> relay
-turn.input_end                     device -> relay
+turn.input_end                     device -> relay (PTT/device endpointing)
+turn.input_stop                    relay -> device (server endpointing)
 ASR final                          relay internal
 agent.run                          relay -> connector
 agent.accepted                     connector -> relay
@@ -52,8 +53,15 @@ turn.cancel
   -> agent.cancel -> AgentRuntime.cancel
   -> abort TTS
   -> drop late events
-  -> turn.done(cancelled)
+  -> turn.error(cancelled)
 ```
+
+For a WakeNet/server-endpointed turn, Relay observes the PCM stream. Sustained
+speech followed by trailing silence emits `turn.input_stop(speech_end)` and
+finishes ASR input. A no-speech deadline emits `turn.input_stop(no_speech)` and
+cancels without ASR final. A wake word detected while capturing, waiting, or
+speaking sends `turn.cancel`; the device starts the replacement turn only after
+the old turn's terminal response.
 
 ## Permission wait
 

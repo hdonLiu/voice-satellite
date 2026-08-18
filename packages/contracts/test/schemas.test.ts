@@ -91,4 +91,17 @@ describe("protocol unions", () => {
       }),
     ).toThrow(ProtocolValidationError);
   });
+
+  it("accepts the Relay command that stops server-endpointed input", () => {
+    const message = {
+      v: 1,
+      type: "turn.input_stop",
+      connectionId: "connection-1",
+      seq: 3,
+      conversationId: "conversation-1",
+      turnId: "turn-1",
+      payload: { reason: "speech_end" },
+    };
+    expect(parseSchema(RelayToDeviceSchema, message)).toEqual(message);
+  });
 });

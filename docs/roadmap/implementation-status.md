@@ -27,7 +27,7 @@ and exit gates remain in the
   status, physical permissions, bounded ACP lines, and child shutdown
 - ESP-IDF firmware organized behind a board port, with ATK-DNESP32S3 ES8388,
   ST7789/LVGL transcript display, 24-to-16 kHz capture conversion, bounded
-  playback, PTT, optional WakeNet, energy endpointing, NVS config, Wi-Fi,
+  playback, PTT, optional WakeNet, Relay-side WakeNet endpointing, NVS config, Wi-Fi,
   verified TLS/WSS, reconnect, and physical approval
 - a strongly typed `TranscriptSinkPort` that receives the recognized text with
   its device, conversation, and turn identifiers, independently of the future
@@ -57,6 +57,10 @@ and exit gates remain in the
   completed without saturating the device upload queue
 - the firmware stores the bounded maximum capture window in PSRAM while
   retaining an internal DMA reserve; both PTT and WakeNet profiles pass CI
+
+The WakeNet endpointing and wake-to-cancel changes are implemented locally but
+are not included in the deployment and hardware verification claims above until
+the updated Relay is deployed and the updated firmware passes a physical turn.
 
 ## Pending qualification and later integration
 

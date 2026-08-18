@@ -10,7 +10,7 @@ in the [task-level execution plan](execution-plan.zh-CN.md).
 ## Release definition
 
 v1.0 delivers one ESP32-S3 device, one single-node Relay, one outbound Connector,
-one OpenClaw voice agent, half-duplex PCM, push-to-talk plus optional WakeNet/VAD,
+one OpenClaw voice agent, half-duplex PCM, push-to-talk plus optional WakeNet,
 streaming ASR/TTS, cancellation, physical approval, signed OTA, conformance tests,
 SBOMs, and reproducible public releases.
 
@@ -175,7 +175,7 @@ Estimate: 6–10 days. Target release: v0.1.0.
 - restart/reconnect never plays audio from an old turn
 - every unavailable dependency returns a stable user-facing error
 
-## P5: WakeNet, VAD, display, and approval
+## P5: WakeNet, server endpointing, display, and approval
 
 Estimate: 8–12 days. Target release: v0.2.0.
 
@@ -183,9 +183,12 @@ Estimate: 8–12 days. Target release: v0.2.0.
 
 - create `ptt`, `wakenet`, and `headless` firmware profiles
 - isolate ESP-SR behind a build option and separate adapter
-- run single-mic WakeNet/VAD only while idle; keep v1 half-duplex and AEC off
+- run single-mic WakeNet while idle and during interruptible capture, wait, and
+  playback states; keep v1 half-duplex and AEC off
 - retain push-to-talk as a permanent fallback
-- calibrate wake cooldown, no-speech timeout, VAD tail, and maximum input length
+- implement Relay-side speech-end detection for WakeNet turns while PTT remains
+  device-endpointed
+- calibrate wake cooldown, no-speech timeout, speech tail, and maximum input length
 - display transcript, answer, state, offline/error, and permission prompts with
   bounded text and refresh rate
 - add structured permission requests with physical allow/deny and deny-on-timeout

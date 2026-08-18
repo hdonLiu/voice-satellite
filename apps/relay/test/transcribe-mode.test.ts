@@ -155,6 +155,244 @@ describe("transcribe Relay mode", () => {
       await relay.stop();
     }
   });
+
+  it("server-endpoints speech without a device input_end message", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const asr = new FinalAsr();
+    const sink = new RecordingSink();
+    const relay = new RelayServer(
+      asr,
+      undefined,
+      {
+        host: "127.0.0.1",
+        port: 0,
+        mode: "transcribe",
+        deviceCredentials: [deviceCredential("device-test", "device-secret")],
+        serverEndpointer: {
+          rmsThreshold: 500,
+          minimumSpeechMs: 40,
+          trailingSilenceMs: 40,
+          noSpeechTimeoutMs: 200,
+          maximumCaptureMs: 1_000,
+        },
+      },
+      sink,
+    );
+    const address = await relay.start();
+    const device = new WebSocket(`ws://127.0.0.1:${address.port}/v1/device`, {
+      headers: { Authorization: "Bearer device-secret" },
+    });
+
+    try {
+      await once(device, "open");
+      device.send(
+        JSON.stringify({
+          v: 1,
+          type: "device.hello",
+          seq: 0,
+          payload: { physicalApproval: false },
+        }),
+      );
+      const welcome = await nextJson(device);
+      const connectionId = welcome.connectionId as string;
+      const conversationId = welcome.conversationId as string;
+      const turnId = newId<"TurnId">();
+      const streamId = newId<"AudioStreamId">();
+      const completed = collectUntilDone(device);
+
+      device.send(
+        JSON.stringify({
+          v: 1,
+          type: "turn.start",
+          connectionId,
+          seq: 1,
+          conversationId,
+          turnId,
+          payload: { audioStreamId: streamId, endpointing: "server" },
+        }),
+      );
+      for (const [sequence, amplitude] of [1_000, 1_000, 0, 0].entries()) {
+        device.send(
+          encodeAudioWireFrame({
+            direction: "input",
+            sequence,
+            timestampMs: sequence * 20,
+            streamId,
+            payload: pcmFrame(amplitude),
+          }),
+        );
+      }
+
+      const messages = await completed;
+      expect(messages).toContainEqual(
+        expect.objectContaining({
+          type: "turn.input_stop",
+          payload: { reason: "speech_end" },
+        }),
+      );
+      expect(asr.frames).toBe(4);
+      expect(sink.transcripts).toHaveLength(1);
+    } finally {
+      device.close();
+      await relay.stop();
+    }
+  });
+
+  it("commits detected speech at the server maximum capture deadline", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const asr = new FinalAsr();
+    const relay = new RelayServer(
+      asr,
+      undefined,
+      {
+        host: "127.0.0.1",
+        port: 0,
+        mode: "transcribe",
+        deviceCredentials: [deviceCredential("device-test", "device-secret")],
+        serverEndpointer: {
+          rmsThreshold: 500,
+          minimumSpeechMs: 20,
+          trailingSilenceMs: 200,
+          noSpeechTimeoutMs: 50,
+          maximumCaptureMs: 80,
+        },
+      },
+      new RecordingSink(),
+    );
+    const address = await relay.start();
+    const device = new WebSocket(`ws://127.0.0.1:${address.port}/v1/device`, {
+      headers: { Authorization: "Bearer device-secret" },
+    });
+
+    try {
+      await once(device, "open");
+      device.send(
+        JSON.stringify({
+          v: 1,
+          type: "device.hello",
+          seq: 0,
+          payload: { physicalApproval: false },
+        }),
+      );
+      const welcome = await nextJson(device);
+      const turnId = newId<"TurnId">();
+      const streamId = newId<"AudioStreamId">();
+      const completed = collectUntilDone(device);
+      device.send(
+        JSON.stringify({
+          v: 1,
+          type: "turn.start",
+          connectionId: welcome.connectionId,
+          seq: 1,
+          conversationId: welcome.conversationId,
+          turnId,
+          payload: { audioStreamId: streamId, endpointing: "server" },
+        }),
+      );
+      device.send(
+        encodeAudioWireFrame({
+          direction: "input",
+          sequence: 0,
+          timestampMs: 0,
+          streamId,
+          payload: pcmFrame(1_000),
+        }),
+      );
+
+      const messages = await completed;
+      expect(messages).toContainEqual(
+        expect.objectContaining({
+          type: "turn.input_stop",
+          payload: { reason: "max_duration" },
+        }),
+      );
+      expect(asr.frames).toBe(1);
+    } finally {
+      device.close();
+      await relay.stop();
+    }
+  });
+
+  it("cancels a server-endpointed turn when speech never becomes sustained", async () => {
+    vi.spyOn(console, "info").mockImplementation(() => undefined);
+    const asr = new FinalAsr();
+    const relay = new RelayServer(
+      asr,
+      undefined,
+      {
+        host: "127.0.0.1",
+        port: 0,
+        mode: "transcribe",
+        deviceCredentials: [deviceCredential("device-test", "device-secret")],
+        serverEndpointer: {
+          noSpeechTimeoutMs: 100,
+          maximumCaptureMs: 300,
+        },
+      },
+      new RecordingSink(),
+    );
+    const address = await relay.start();
+    const device = new WebSocket(`ws://127.0.0.1:${address.port}/v1/device`, {
+      headers: { Authorization: "Bearer device-secret" },
+    });
+
+    try {
+      await once(device, "open");
+      device.send(
+        JSON.stringify({
+          v: 1,
+          type: "device.hello",
+          seq: 0,
+          payload: { physicalApproval: false },
+        }),
+      );
+      const welcome = await nextJson(device);
+      const terminal = collectUntilTerminal(device);
+      const turnId = newId<"TurnId">();
+      const streamId = newId<"AudioStreamId">();
+      device.send(
+        JSON.stringify({
+          v: 1,
+          type: "turn.start",
+          connectionId: welcome.connectionId,
+          seq: 1,
+          conversationId: welcome.conversationId,
+          turnId,
+          payload: {
+            audioStreamId: streamId,
+            endpointing: "server",
+          },
+        }),
+      );
+      device.send(
+        encodeAudioWireFrame({
+          direction: "input",
+          sequence: 0,
+          timestampMs: 0,
+          streamId,
+          payload: pcmFrame(1_000),
+        }),
+      );
+
+      const messages = await terminal;
+      expect(messages).toContainEqual(
+        expect.objectContaining({
+          type: "turn.input_stop",
+          payload: { reason: "no_speech" },
+        }),
+      );
+      expect(messages).toContainEqual(
+        expect.objectContaining({
+          type: "turn.error",
+          payload: expect.objectContaining({ code: "cancelled" }),
+        }),
+      );
+      expect(asr.frames).toBe(1);
+    } finally {
+      device.close();
+      await relay.stop();
+    }
+  });
 });
 
 async function nextJson(socket: WebSocket): Promise<Record<string, unknown>> {
@@ -193,6 +431,38 @@ async function collectUntilDone(
         clearTimeout(timer);
         socket.off("message", onMessage);
         reject(error);
+      }
+    };
+    socket.on("message", onMessage);
+  });
+}
+
+function pcmFrame(amplitude: number): Uint8Array {
+  const data = new Uint8Array(640);
+  const view = new DataView(data.buffer);
+  for (let offset = 0; offset < data.byteLength; offset += 2) {
+    view.setInt16(offset, amplitude, true);
+  }
+  return data;
+}
+
+async function collectUntilTerminal(
+  socket: WebSocket,
+): Promise<Array<{ type: string; payload?: unknown }>> {
+  return await new Promise((resolve, reject) => {
+    const messages: Array<{ type: string; payload?: unknown }> = [];
+    const timer = setTimeout(() => reject(new Error("turn timed out")), 5_000);
+    const onMessage = (data: WebSocket.RawData, isBinary: boolean): void => {
+      if (isBinary) return;
+      const message = JSON.parse(data.toString()) as {
+        type: string;
+        payload?: unknown;
+      };
+      messages.push(message);
+      if (message.type === "turn.done" || message.type === "turn.error") {
+        clearTimeout(timer);
+        socket.off("message", onMessage);
+        resolve(messages);
       }
     };
     socket.on("message", onMessage);

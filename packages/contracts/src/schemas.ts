@@ -50,7 +50,12 @@ const DeviceTurnEnvelope = {
 export const TurnStartSchema = StrictObject({
   ...DeviceTurnEnvelope,
   type: Type.Literal("turn.start"),
-  payload: StrictObject({ audioStreamId: OpaqueIdSchema }),
+  payload: StrictObject({
+    audioStreamId: OpaqueIdSchema,
+    endpointing: Type.Optional(
+      Type.Union([Type.Literal("device"), Type.Literal("server")]),
+    ),
+  }),
 });
 export const TurnInputEndSchema = StrictObject({
   ...DeviceTurnEnvelope,
@@ -91,6 +96,17 @@ export const TurnStateSchema = StrictObject({
         "CANCELLED",
         "FAILED",
       ].map((state) => Type.Literal(state)),
+    ),
+  }),
+});
+export const TurnInputStopSchema = StrictObject({
+  ...DeviceTurnEnvelope,
+  type: Type.Literal("turn.input_stop"),
+  payload: StrictObject({
+    reason: Type.Union(
+      ["speech_end", "no_speech", "max_duration"].map((reason) =>
+        Type.Literal(reason),
+      ),
     ),
   }),
 });
@@ -267,6 +283,7 @@ export const RelayToDeviceSchema = Type.Union([
   DeviceWelcomeSchema,
   TurnAcceptedSchema,
   TurnStateSchema,
+  TurnInputStopSchema,
   TranscriptFinalSchema,
   AudioStartSchema,
   AudioEndSchema,

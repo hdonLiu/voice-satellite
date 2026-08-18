@@ -7,7 +7,8 @@
 
 - Firmware: C++ and a pinned stable ESP-IDF release
 - Codec: `esp_codec_dev` for ES8388
-- Optional wake/VAD: pinned ESP-SR component
+- Optional local wake: pinned ESP-SR WakeNet component
+- WakeNet turn endpointing: bounded Relay-side detector over baseline PCM
 - Relay and Connector: TypeScript strict mode on Node.js 24 LTS
 - Workspace: pnpm
 - Transport: authenticated WSS

@@ -6,7 +6,7 @@ choice VS_INPUT_PROFILE
     config VS_PROFILE_PTT
         bool "Push to talk"
     config VS_PROFILE_WAKENET
-        bool "WakeNet local wake word and energy endpointing"
+        bool "WakeNet local wake word with Relay endpointing"
 endchoice
 
 config VS_WIFI_SSID
@@ -42,10 +42,5 @@ config VS_MAX_CAPTURE_MS
     int "Maximum capture duration in milliseconds"
     range 1000 30000
     default 15000
-
-config VS_WAKE_SILENCE_MS
-    int "WakeNet capture silence endpoint in milliseconds"
-    range 300 3000
-    default 900
 
 endmenu

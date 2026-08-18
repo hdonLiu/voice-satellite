@@ -1,5 +1,6 @@
 export * from "./application/bounded-async-queue.js";
 export * from "./application/sentence-segmenter.js";
+export * from "./application/server-endpointer.js";
 export * from "./application/transcription-orchestrator.js";
 export * from "./application/turn-orchestrator.js";
 export * from "./application/turn-registry.js";

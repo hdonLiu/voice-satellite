@@ -30,7 +30,7 @@ required before a release; see the
 ```text
 ESP32-S3                         Cloud                       OpenClaw computer
 ┌──────────────────┐   WSS   ┌──────────────────┐   WSS   ┌──────────────────┐
-│ wake/VAD/audio/UI├─────────►│ Voice Relay      ├─────────►│ Local Connector   │
+│ wake/audio/UI    ├─────────►│ Voice Relay      ├─────────►│ Local Connector   │
 │ Device Link v1   │◄─────────┤ ASR / TTS        │◄─────────┤ Connector Link v1 │
 └──────────────────┘  PCM/ctl └──────────────────┘  events └────────┬─────────┘
                                                                     │ ACP/stdio
@@ -42,8 +42,8 @@ ESP32-S3                         Cloud                       OpenClaw computer
 
 The system has three independently deployable units:
 
-- **Device implementation** — local wake detection, VAD, audio capture/playback,
-  UI, and a narrow Device Link protocol. ESP32 is the first reference device;
+- **Device implementation** — local wake detection, audio capture/playback, UI,
+  and a narrow Device Link protocol. ESP32 is the first reference device;
   implementations for other device platforms can use the same protocol.
 - **Relay** — device authentication, streaming ASR/TTS, turn orchestration,
   backpressure, and Connector routing. It never receives OpenClaw credentials.
@@ -59,7 +59,7 @@ contracts are in the [Detailed Design](docs/design/detailed-design.zh-CN.md).
 ## v1 reference scope
 
 - ATK-DNESP32S3 with ES8388 audio codec
-- ESP-IDF firmware with push-to-talk and optional ESP-SR WakeNet/VAD profiles
+- ESP-IDF firmware with push-to-talk and optional ESP-SR WakeNet profiles
 - Half-duplex PCM audio over authenticated WSS
 - Single-node TypeScript Relay with pluggable streaming ASR and TTS providers
 - TypeScript Connector using `openclaw acp` over local stdio

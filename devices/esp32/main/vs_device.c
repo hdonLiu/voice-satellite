@@ -75,10 +75,9 @@ typedef struct {
     uint8_t output_stream[16];
     bool output_stream_active;
     bool turn_terminal_received;
+    bool server_endpointing;
+    bool pending_wake_restart;
     uint32_t expected_output_sequence;
-    uint32_t capture_frames;
-    uint32_t silence_frames;
-    bool speech_seen;
     esp_timer_handle_t capture_timer;
 } device_t;
 
@@ -86,6 +85,7 @@ static device_t device;
 static StaticQueue_t outgoing_audio_queue_control;
 static uint8_t *outgoing_audio_queue_storage;
 static void cancel_turn(void);
+static esp_err_t begin_capture(bool server_endpointing);
 
 // Sending one WebSocket message per 20 ms audio frame can be slower than real
 // time on a high-latency public link. Keep the complete bounded capture window
@@ -204,23 +204,6 @@ static void monitored_audio(const int16_t *samples, size_t count, void *context)
     vs_wake_feed(samples, count);
     uint32_t level = vs_audio_rms(samples, count);
     if (atomic_load(&device.capture_active)) vs_board_display_set_audio_level(level);
-#if CONFIG_VS_PROFILE_WAKENET
-    if (!atomic_load(&device.capture_active)) return;
-    device.capture_frames++;
-    if (level >= 700) {
-        device.speech_seen = true;
-        device.silence_frames = 0;
-    } else if (device.speech_seen) {
-        device.silence_frames++;
-    }
-    if (device.speech_seen && device.silence_frames * 20 >= CONFIG_VS_WAKE_SILENCE_MS) {
-        bool expected = false;
-        if (atomic_compare_exchange_strong(&device.endpoint_queued, &expected, true))
-            post_event(EVENT_ENDPOINT, NULL, 0);
-    }
-#else
-    (void)samples; (void)count;
-#endif
 }
 
 static esp_err_t send_json(char *text) {
@@ -251,6 +234,8 @@ static void set_idle(void) {
     device.permission_id[0] = '\0';
     device.output_stream_active = false;
     device.turn_terminal_received = false;
+    device.server_endpointing = false;
+    device.pending_wake_restart = false;
     vs_board_set_output(false);
     vs_board_set_status(false);
     vs_board_display_set_audio_level(0);
@@ -275,7 +260,7 @@ static void capture_timeout(void *context) {
         post_event(EVENT_ENDPOINT, NULL, 0);
 }
 
-static esp_err_t begin_capture(void) {
+static esp_err_t begin_capture(bool server_endpointing) {
     if (device.state != DEVICE_IDLE || !device.control.connection_id[0]) return ESP_ERR_INVALID_STATE;
     vs_uuid_generate(device.input_stream);
     vs_uuid_format(device.input_stream, device.input_stream_text);
@@ -284,10 +269,9 @@ static esp_err_t begin_capture(void) {
     vs_uuid_format(turn, device.turn_id);
     cJSON *payload = cJSON_CreateObject();
     cJSON_AddStringToObject(payload, "audioStreamId", device.input_stream_text);
+    cJSON_AddStringToObject(payload, "endpointing", server_endpointing ? "server" : "device");
     ESP_RETURN_ON_ERROR(send_turn("turn.start", payload), TAG, "turn.start");
-    device.capture_frames = 0;
-    device.silence_frames = 0;
-    device.speech_seen = false;
+    device.server_endpointing = server_endpointing;
     atomic_store(&device.audio_sequence, 0);
     atomic_store(&device.endpoint_queued, false);
     xSemaphoreTake(device.capture_mutex, portMAX_DELAY);
@@ -296,20 +280,21 @@ static esp_err_t begin_capture(void) {
     atomic_store(&device.capture_active, true);
     xSemaphoreGive(device.capture_mutex);
     device.state = DEVICE_CAPTURING;
-    vs_wake_set_enabled(false);
+    vs_wake_set_enabled(server_endpointing);
     vs_audio_set_capture(true);
     vs_board_set_status(true);
     vs_board_display_set_audio_level(0);
     vs_board_display_set_state("Listening");
     vs_board_display_set_transcript("已唤醒，请讲话…");
     esp_timer_stop(device.capture_timer);
-    esp_timer_start_once(device.capture_timer, CONFIG_VS_MAX_CAPTURE_MS * 1000ULL);
+    if (!server_endpointing)
+        esp_timer_start_once(device.capture_timer, CONFIG_VS_MAX_CAPTURE_MS * 1000ULL);
     ESP_LOGI(TAG, "capture started, turn=%s", device.turn_id);
     return ESP_OK;
 }
 
 static void end_capture(void) {
-    if (device.state != DEVICE_CAPTURING) return;
+    if (device.state != DEVICE_CAPTURING || device.server_endpointing) return;
     xSemaphoreTake(device.capture_mutex, portMAX_DELAY);
     atomic_store(&device.capture_active, false);
     vs_audio_set_capture(false);
@@ -329,6 +314,50 @@ static void end_capture(void) {
         return;
     }
     xSemaphoreGive(device.capture_mutex);
+    vs_wake_set_enabled(true);
+}
+
+static void stop_server_capture(const char *reason) {
+    if (device.state != DEVICE_CAPTURING || !device.server_endpointing) return;
+    xSemaphoreTake(device.capture_mutex, portMAX_DELAY);
+    atomic_store(&device.capture_active, false);
+    atomic_fetch_add(&device.capture_generation, 1);
+    vs_audio_set_capture(false);
+    xQueueReset(device.outgoing_audio);
+    xSemaphoreGive(device.capture_mutex);
+    esp_timer_stop(device.capture_timer);
+    device.state = DEVICE_WAITING;
+    vs_board_display_set_audio_level(0);
+    if (reason && !strcmp(reason, "no_speech")) {
+        vs_board_display_set_state("Recognizing");
+        vs_board_display_set_transcript("没有听到语音");
+    } else {
+        vs_board_display_set_state("Recognizing");
+        vs_board_display_set_transcript("语音已结束，正在识别…");
+    }
+    vs_wake_set_enabled(true);
+}
+
+static void interrupt_for_wake(void) {
+    if (device.state != DEVICE_CAPTURING && device.state != DEVICE_WAITING &&
+        device.state != DEVICE_SPEAKING && device.state != DEVICE_APPROVAL)
+        return;
+    stop_capture();
+    vs_audio_stop_playback();
+    vs_board_set_output(false);
+    vs_wake_set_enabled(false);
+    device.pending_wake_restart = true;
+    device.state = DEVICE_WAITING;
+    vs_board_display_set_state("CloudConnecting");
+    vs_board_display_set_transcript("已打断，正在开始新一轮…");
+    if (send_turn("turn.cancel", cJSON_CreateObject()) != ESP_OK) set_idle();
+}
+
+static void finish_and_maybe_restart(void) {
+    bool restart = device.pending_wake_restart;
+    vs_audio_stop_playback();
+    set_idle();
+    if (restart) begin_capture(true);
 }
 
 static void cancel_turn(void) {
@@ -363,7 +392,7 @@ static void process_button(bool pressed) {
         return;
     }
     if (pressed && device.state == DEVICE_IDLE) {
-        begin_capture();
+        begin_capture(false);
         return;
     }
     if (!pressed && device.state == DEVICE_CAPTURING) end_capture();
@@ -416,6 +445,7 @@ static void process_control(const uint8_t *data, size_t size) {
         if (state && !strcmp(state, "SPEAKING")) {
             device.state = DEVICE_SPEAKING;
             vs_board_display_set_state("Speaking");
+            vs_wake_set_enabled(true);
         } else if (state && !strcmp(state, "TRANSCRIBING")) {
             vs_board_display_set_state("Recognizing");
         } else if (state && !strcmp(state, "WAITING_AGENT")) {
@@ -427,6 +457,11 @@ static void process_control(const uint8_t *data, size_t size) {
         ESP_LOGI(TAG, "transcript: %s", text);
         vs_board_display_set_transcript(text);
         vs_board_display_set_state("Recognized");
+        vs_wake_set_enabled(true);
+    } else if (!strcmp(type, "turn.input_stop")) {
+        const char *reason = vs_json_string(payload, "reason");
+        if (!reason) goto invalid;
+        stop_server_capture(reason);
     } else if (!strcmp(type, "permission.request")) {
         const char *request_id = vs_json_string(payload, "requestId");
         if (!request_id) goto invalid;
@@ -447,19 +482,26 @@ static void process_control(const uint8_t *data, size_t size) {
         device.turn_terminal_received = false;
         device.expected_output_sequence = 0;
         device.state = DEVICE_SPEAKING;
+        vs_wake_set_enabled(true);
         vs_audio_stop_playback();
         vs_board_set_output(true);
     } else if (!strcmp(type, "audio.end")) {
         device.output_stream_active = false;
     } else if (!strcmp(type, "turn.done")) {
         ESP_LOGI(TAG, "turn completed");
+        if (device.pending_wake_restart) {
+            finish_and_maybe_restart();
+            cJSON_Delete(message);
+            return;
+        }
         device.turn_terminal_received = true;
         if (vs_audio_playback_pending() == 0) set_idle();
     } else if (!strcmp(type, "turn.error")) {
-        ESP_LOGW(TAG, "turn failed: %s", vs_json_string(payload, "code") ? vs_json_string(payload, "code") : "unknown");
-        vs_board_display_set_state("Error");
-        vs_audio_stop_playback();
-        set_idle();
+        const char *code = vs_json_string(payload, "code");
+        ESP_LOGW(TAG, "turn failed: %s", code ? code : "unknown");
+        if (!device.pending_wake_restart && (!code || strcmp(code, "cancelled")))
+            vs_board_display_set_state("Error");
+        finish_and_maybe_restart();
     } else if (!strcmp(type, "ping")) {
         send_pong(message);
     }
@@ -511,8 +553,14 @@ static void controller_task(void *context) {
             case EVENT_LINK_BINARY: process_binary(event.data, event.size); break;
             case EVENT_BUTTON_DOWN: process_button(true); break;
             case EVENT_BUTTON_UP: process_button(false); break;
-            case EVENT_WAKE: begin_capture(); break;
-            case EVENT_ENDPOINT: end_capture(); break;
+            case EVENT_WAKE:
+                if (device.state == DEVICE_IDLE) begin_capture(true);
+                else interrupt_for_wake();
+                break;
+            case EVENT_ENDPOINT:
+                if (device.server_endpointing) cancel_turn();
+                else end_capture();
+                break;
             case EVENT_INPUT_DRAINED:
                 if (device.state == DEVICE_WAITING &&
                     send_turn("turn.input_end", cJSON_CreateObject()) != ESP_OK)

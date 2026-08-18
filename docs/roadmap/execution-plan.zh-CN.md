@@ -215,13 +215,13 @@ G0 不通过时不得开始协议冻结。
 | ID        | 任务                          | 依赖                | 产物                     | 验证                         |
 | --------- | ----------------------------- | ------------------- | ------------------------ | ---------------------------- |
 | `ESP-050` | PTT/WakeNet/headless profiles | G4                  | three builds             | PTT 不链接 ESP-SR            |
-| `ESP-051` | ESP-SR WakeDetector adapter   | `ESP-050`           | wake adapter             | 仅 IDLE 运行                 |
-| `ESP-052` | VAD/pre-roll/endpointer       | `ESP-051`           | input controller         | 首尾字声学测试               |
+| `ESP-051` | ESP-SR WakeDetector adapter   | `ESP-050`           | wake adapter             | 空闲和可打断状态运行         |
+| `REL-051` | WakeNet Turn 服务端判停       | `ESP-051`           | server endpointer        | 无语音/尾静音/最长时长测试   |
 | `ESP-053` | 完整状态和文本 UI             | `ESP-035`,G4        | ViewModel UI             | 文本上限和刷新率测试         |
 | `REL-050` | permission lifecycle          | G4                  | structured request state | stale/duplicate/timeout deny |
 | `CON-050` | Agent permission bridge       | `OCA-033`,`REL-050` | permission events        | 原始 tool args 不出本机      |
 | `ESP-054` | 实体键审批                    | `REL-050`,`ESP-053` | allow/deny UI            | 一次性且超时默认拒绝         |
-| `TST-050` | 声学基准                      | `ESP-052`           | wake/VAD report          | 达到计划目标或记录调整       |
+| `TST-050` | 声学基准                      | `REL-051`           | wake/endpoint report     | 达到计划目标或记录调整       |
 | `REP-050` | 发布 v0.2.0                   | 所有 P5             | prerelease               | profile/license 完整         |
 
 ## 9. P6：安全、运维与稳定性

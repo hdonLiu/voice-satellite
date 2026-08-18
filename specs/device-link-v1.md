@@ -68,6 +68,7 @@ major versions are rejected.
 | `device.welcome`     | Accept negotiation and report Connector status  |
 | `turn.accepted`      | Relay accepted the turn                         |
 | `turn.state`         | Stable state for UI presentation                |
+| `turn.input_stop`    | Stop microphone input after Relay endpointing   |
 | `transcript.final`   | Final user transcript                           |
 | `audio.start`        | Declare output format and begin playback stream |
 | `audio.end`          | End playback stream                             |
@@ -100,10 +101,18 @@ diagnostics?: platform / board / softwareVersion / buildProfile
 Without physical approval, permission requests are denied. Diagnostics are
 optional and never affect routing or turn behavior.
 
-Wake detection, VAD, display, buttons, OTA, and the push-to-talk/WakeNet build
-profile are local implementation details. Both input profiles produce the same
-`turn.start` → audio → `turn.input_end` wire behavior. v1 is half-duplex and has
-no barge-in capability. Relay must not branch on diagnostics.
+Wake detection, display, buttons, OTA, and the push-to-talk/WakeNet build profile
+are local implementation details. Endpoint ownership is declared per turn
+because it changes Relay behavior:
+
+```text
+turn.start.payload.endpointing: "device" | "server"
+```
+
+The field is optional for compatibility and defaults to `device`. A
+device-endpointed turn sends `turn.input_end`. A server-endpointed turn streams
+until Relay sends `turn.input_stop` with `speech_end`, `no_speech`, or
+`max_duration`. Relay must not branch on diagnostics or platform identity.
 
 ## Binary audio header
 
@@ -131,6 +140,11 @@ at application level. Sequence numbers detect gaps and aid diagnostics.
 - `turn.start` is invalid while another turn is active.
 - audio may immediately follow `turn.start`; Relay establishes the active Turn
   before it emits `turn.accepted`. Audio is invalid after `turn.input_end`.
+- after `turn.input_stop`, the device stops capture and drops queued uplink
+  audio; Relay tolerates and drops already in-flight frames for that stream.
+- `no_speech` cancels the active ASR without producing a final transcript and
+  never invokes the Agent. `speech_end` and `max_duration` commit input only
+  when speech was detected.
 - disconnect cancels the current turn.
 - a cancelled or terminal turn ignores late audio and control events.
 - reconnection creates a new connection and never resumes an old audio stream.

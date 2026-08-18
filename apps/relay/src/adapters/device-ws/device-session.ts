@@ -20,6 +20,11 @@ import {
 import type WebSocket from "ws";
 import { nextWithSignal } from "../../application/async.js";
 import { BoundedAsyncQueue } from "../../application/bounded-async-queue.js";
+import {
+  ServerEndpointer,
+  type InputStopReason,
+  type ServerEndpointerOptions,
+} from "../../application/server-endpointer.js";
 import { TurnOrchestrator } from "../../application/turn-orchestrator.js";
 import { TranscriptionOrchestrator } from "../../application/transcription-orchestrator.js";
 import type { TurnRegistry } from "../../application/turn-registry.js";
@@ -46,7 +51,11 @@ interface ActiveTurn {
   readonly inputStreamId: AudioStreamId;
   readonly audio: BoundedAsyncQueue<AudioFrame>;
   readonly abort: AbortController;
+  readonly endpointer?: ServerEndpointer;
   lastAudioSequence: number;
+  inputClosed: boolean;
+  noSpeechTimer?: NodeJS.Timeout;
+  maximumCaptureTimer?: NodeJS.Timeout;
   permission?: {
     readonly requestId: string;
     readonly deferred: Deferred<PermissionDecision>;
@@ -59,6 +68,7 @@ export interface DeviceSessionOptions {
   readonly permissionTimeoutMs?: number;
   readonly turnTimeoutMs?: number;
   readonly agentTimeoutMs?: number;
+  readonly serverEndpointer?: ServerEndpointerOptions;
   readonly mode?: "device-link" | "transcribe" | "conversation";
 }
 
@@ -68,10 +78,12 @@ export class DeviceSession implements DeviceOutputPort {
   readonly #audioQueueFrames: number;
   readonly #permissionTimeoutMs: number;
   readonly #turnTimeoutMs: number;
+  readonly #serverEndpointerOptions: ServerEndpointerOptions;
   readonly #orchestrator: TurnOrchestrator | undefined;
   readonly #transcriber: TranscriptionOrchestrator | undefined;
   readonly #mode: "device-link" | "transcribe" | "conversation";
   #active: ActiveTurn | undefined;
+  #lastTerminalTurnId: TurnId | undefined;
   #closed = false;
 
   public constructor(
@@ -90,6 +102,7 @@ export class DeviceSession implements DeviceOutputPort {
     this.#audioQueueFrames = options.audioQueueFrames ?? 250;
     this.#permissionTimeoutMs = options.permissionTimeoutMs ?? 20_000;
     this.#turnTimeoutMs = options.turnTimeoutMs ?? 120_000;
+    this.#serverEndpointerOptions = options.serverEndpointer ?? {};
     this.#mode = options.mode ?? "conversation";
     if (this.#mode === "conversation") {
       if (!asr || !tts) {
@@ -149,6 +162,7 @@ export class DeviceSession implements DeviceOutputPort {
     const error = new VoiceSatelliteError("cancelled", "device disconnected");
     this.#active?.abort.abort(error);
     this.#active?.audio.fail(error);
+    if (this.#active) this.#clearEndpointTimers(this.#active);
     if (this.#active?.permission) {
       clearTimeout(this.#active.permission.timer);
       this.#active.permission.deferred.resolve("deny");
@@ -221,6 +235,7 @@ export class DeviceSession implements DeviceOutputPort {
   }
 
   public async finish(turnId: TurnId, result: TurnResult): Promise<void> {
+    this.#lastTerminalTurnId = turnId;
     if (result.status === "completed") {
       await this.#sendTurn("turn.done", turnId, {});
       return;
@@ -262,13 +277,17 @@ export class DeviceSession implements DeviceOutputPort {
         await this.#startTurn(
           asId<"TurnId">(message.turnId),
           asId<"AudioStreamId">(message.payload.audioStreamId),
+          message.payload.endpointing ?? "device",
         );
         break;
       case "turn.input_end":
-        this.#requireTurn(message.turnId).audio.close();
+        this.#closeInput(this.#requireTurn(message.turnId));
         break;
       case "turn.cancel": {
+        if (this.#lastTerminalTurnId === message.turnId) break;
         const active = this.#requireTurn(message.turnId);
+        this.#clearEndpointTimers(active);
+        active.inputClosed = true;
         active.abort.abort(
           new DOMException("device cancelled turn", "AbortError"),
         );
@@ -312,38 +331,54 @@ export class DeviceSession implements DeviceOutputPort {
         "audio sequence is not contiguous",
       );
     }
+    active.lastAudioSequence = wire.sequence;
+    if (active.inputClosed) return;
     if (active.audio.size >= this.#audioQueueFrames) {
       throw new VoiceSatelliteError(
         "backpressure",
         "device audio queue is full",
       );
     }
-    active.lastAudioSequence = wire.sequence;
-    await active.audio.push({
+    const frame = {
       streamId: wire.streamId,
       sequence: wire.sequence,
       timestampMs: wire.timestampMs,
       data: wire.payload,
-    });
+    };
+    await active.audio.push(frame);
+    const stop = active.endpointer?.accept(frame);
+    if (active.endpointer?.speechDetected && active.noSpeechTimer) {
+      clearTimeout(active.noSpeechTimer);
+      delete active.noSpeechTimer;
+    }
+    if (stop) await this.#stopAutomaticInput(active, stop);
   }
 
   async #startTurn(
     turnId: TurnId,
     inputStreamId: AudioStreamId,
+    endpointing: "device" | "server",
   ): Promise<void> {
     if (this.#active)
       throw new VoiceSatelliteError(
         "busy",
         "device already has an active turn",
       );
+    const endpointer =
+      endpointing === "server"
+        ? new ServerEndpointer(this.#serverEndpointerOptions)
+        : undefined;
     const active: ActiveTurn = {
       turnId,
       inputStreamId,
       audio: new BoundedAsyncQueue<AudioFrame>(this.#audioQueueFrames),
       abort: new AbortController(),
+      ...(endpointer ? { endpointer } : {}),
       lastAudioSequence: -1,
+      inputClosed: false,
     };
     this.#active = active;
+    if (endpointer) this.#armEndpointTimers(active, endpointer);
     await this.#sendTurn("turn.accepted", turnId, {});
     const input = {
       deviceId: this.deviceId,
@@ -365,8 +400,72 @@ export class DeviceSession implements DeviceOutputPort {
               signal: active.abort.signal,
             });
     void run.finally(() => {
+      this.#clearEndpointTimers(active);
       if (this.#active === active) this.#active = undefined;
     });
+  }
+
+  #armEndpointTimers(active: ActiveTurn, endpointer: ServerEndpointer): void {
+    active.noSpeechTimer = setTimeout(() => {
+      if (
+        this.#active !== active ||
+        active.inputClosed ||
+        endpointer.speechDetected
+      ) {
+        return;
+      }
+      void this.#cancelAutomaticInput(active, "no_speech").catch((error) =>
+        this.#protocolFailure(error),
+      );
+    }, endpointer.noSpeechTimeoutMs);
+    active.maximumCaptureTimer = setTimeout(() => {
+      if (this.#active !== active || active.inputClosed) return;
+      const operation = endpointer.speechDetected
+        ? this.#stopAutomaticInput(active, "max_duration")
+        : this.#cancelAutomaticInput(active, "no_speech");
+      void operation.catch((error) => this.#protocolFailure(error));
+    }, endpointer.maximumCaptureMs);
+  }
+
+  async #stopAutomaticInput(
+    active: ActiveTurn,
+    reason: InputStopReason,
+  ): Promise<void> {
+    if (this.#active !== active || active.inputClosed) return;
+    active.inputClosed = true;
+    this.#clearEndpointTimers(active);
+    await this.#sendTurn("turn.input_stop", active.turnId, { reason });
+    active.audio.close();
+  }
+
+  async #cancelAutomaticInput(
+    active: ActiveTurn,
+    reason: "no_speech",
+  ): Promise<void> {
+    if (this.#active !== active || active.inputClosed) return;
+    active.inputClosed = true;
+    this.#clearEndpointTimers(active);
+    await this.#sendTurn("turn.input_stop", active.turnId, { reason });
+    active.abort.abort(new DOMException("no speech detected", "AbortError"));
+    active.audio.close();
+  }
+
+  #closeInput(active: ActiveTurn): void {
+    if (active.inputClosed) return;
+    active.inputClosed = true;
+    this.#clearEndpointTimers(active);
+    active.audio.close();
+  }
+
+  #clearEndpointTimers(active: ActiveTurn): void {
+    if (active.noSpeechTimer) {
+      clearTimeout(active.noSpeechTimer);
+      delete active.noSpeechTimer;
+    }
+    if (active.maximumCaptureTimer) {
+      clearTimeout(active.maximumCaptureTimer);
+      delete active.maximumCaptureTimer;
+    }
   }
 
   async #runLinkTurn(active: ActiveTurn): Promise<TurnResult> {
@@ -459,8 +558,11 @@ export class DeviceSession implements DeviceOutputPort {
         : new VoiceSatelliteError("invalid_message", "invalid device message", {
             cause: error,
           });
-    this.#active?.audio.fail(stable);
-    this.#active?.abort.abort(stable);
+    if (this.#active) {
+      this.#clearEndpointTimers(this.#active);
+      this.#active.audio.fail(stable);
+      this.#active.abort.abort(stable);
+    }
     this.socket.close(
       stable.code === "backpressure" ? 4008 : 4002,
       stable.code,

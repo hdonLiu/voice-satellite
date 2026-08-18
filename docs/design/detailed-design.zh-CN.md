@@ -119,10 +119,10 @@ DeviceHelloPayload
 `diagnostics` 只用于日志和兼容性分析，TurnOrchestrator 禁止按 `platform == esp32`
 或具体板名分支。没有实体审批时，权限请求默认拒绝。
 
-PTT 和 WakeNet 是构建 profile，唤醒/VAD 完全在设备本地发生。两个 profile
-在线上都只产生 `turn.start` → audio → `turn.input_end`，因此不上报为业务
-字段。屏幕、按键、OTA 和板型也是本地实现细节。v1 是半双工，不声明
-barge-in 能力。
+PTT 和 WakeNet 是构建 profile，不放入 hello。每轮 `turn.start` 只声明一个会
+改变 Relay 决策的字段 `endpointing: device | server`：PTT 使用 `device` 并
+发送 `turn.input_end`；WakeNet 使用 `server`，由 Relay 返回
+`turn.input_stop`。屏幕、按键、OTA 和板型仍是本地实现细节。
 
 ### 4.3 AgentRuntime v1 contract
 
@@ -306,6 +306,7 @@ adapters/device-ws       设备鉴权、握手、控制与二进制音频解析
 adapters/agent-port-ws   Connector Link 鉴权、握手和 AgentPort 实现
 adapters/asr/*           流式 ASR
 adapters/tts/*           流式 TTS
+application/endpointer   固定 PCM 上的服务端分句、无语音和最长输入
 application/turn         TurnOrchestrator、状态和取消
 application/segmenter    单调 delta 累积与安全断句
 application/routing      已认证连接目录
@@ -319,7 +320,8 @@ bootstrap                配置、composition root、health、shutdown
 2. 验证该 Turn 使用 v1 固定输入/输出格式。
 3. 创建 `TurnContext`、有界队列和根 `AbortController`。
 4. 打开 ASR，将设备音频按背压规则写入。
-5. `turn.input_end` 后结束 ASR 输入并等待唯一 final。
+5. 设备端点的 `turn.input_end`，或服务端点的 `turn.input_stop`，结束 ASR 输入
+   并等待唯一 final；`no_speech` 直接取消且不调用 Agent。
 6. 创建 `RequestId`，通过 AgentPort 发起请求并等待 accepted。
 7. 对 `text_delta` 做单调性校验、累计和分句。
 8. 第一段文字到达后打开 TTS；TTS 音频边生成边发送设备。
@@ -484,14 +486,14 @@ sdkconfig 和自检 hook。共享组件禁止导入具体板头文件。
 
 ### 10.2 FreeRTOS 执行单元
 
-| 执行单元           | 职责                                     |
-| ------------------ | ---------------------------------------- |
-| `DeviceController` | 唯一主状态写入者，处理所有控制事件       |
-| `AudioCapture`     | I²S DMA、可选 AFE、固定音频帧和输入 ring |
-| `AudioPlayback`    | 输出 ring、重采样/格式适配、I²S DMA      |
-| `Transport`        | WSS 收发、心跳、重连和协议解码           |
-| `Wake/VAD`         | IDLE 本地唤醒、LISTENING 尾静音判断      |
-| `UI`               | 消费不可变 ViewModel，低优先级刷新       |
+| 执行单元           | 职责                                          |
+| ------------------ | --------------------------------------------- |
+| `DeviceController` | 唯一主状态写入者，处理所有控制事件            |
+| `AudioCapture`     | I²S DMA、可选 AFE、固定音频帧和输入 ring      |
+| `AudioPlayback`    | 输出 ring、重采样/格式适配、I²S DMA           |
+| `Transport`        | WSS 收发、心跳、重连和协议解码                |
+| `WakeDetector`     | IDLE 本地唤醒；收音/等待/播放时支持关键词打断 |
+| `UI`               | 消费不可变 ViewModel，低优先级刷新            |
 
 控制事件使用有界队列；PCM 使用预分配 ring。音频热路径禁止频繁 new/malloc 和
 动态字符串。
@@ -500,17 +502,20 @@ sdkconfig 和自检 hook。共享组件禁止导入具体板头文件。
 
 ```text
 ES8388 ADC -> I2S DMA -> AudioCapture
-  -> 可选 AFE/WakeNet/VAD
+  -> 可选 AFE/WakeNet
   -> pre-roll ring
   -> LISTENING 时 uplink ring
   -> Device Link binary frame
 ```
 
 - PTT profile 不链接 ESP-SR。
-- WakeNet profile 在 IDLE 持续处理本地 PCM，但不上传。
+- WakeNet profile 在 IDLE 持续处理本地 PCM，但不上传；唤醒后声明服务端点并
+  持续上传，直到 Relay 返回 `turn.input_stop`。
 - 唤醒后可补发短 pre-roll，避免截掉第一个字；长度由声学测试确定。
-- 播放期间暂停 WakeNet 和上行，保持 v1 半双工。
-- 松键、VAD、无语音超时或最大时长只产生 controller 事件。
+- 收音、等待和播放期间保持 WakeNet；再次唤醒先取消旧 Turn，收到旧 Turn 终态
+  后再开始新 Turn。
+- Relay 负责 WakeNet 轮次的语音尾静音、无语音和最长时长；PTT 松键仍由设备
+  发送 `turn.input_end`。
 
 ### 10.4 输出音频
 

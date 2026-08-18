@@ -23,7 +23,7 @@ ESP-IDF 固件。自动测试覆盖二进制音频、100 Turn、Fake ACP 和真�
 ```text
 ESP32-S3                         云端                     OpenClaw 所在电脑
 ┌──────────────────┐   WSS   ┌──────────────────┐   WSS   ┌──────────────────┐
-│ 唤醒/VAD/音频/UI  ├────────►│ Voice Relay      ├────────►│ Local Connector  │
+│ 唤醒/音频/UI      ├────────►│ Voice Relay      ├────────►│ Local Connector  │
 │ Device Link v1   │◄────────┤ ASR / TTS        │◄────────┤ Connector Link v1│
 └──────────────────┘  PCM/控制└──────────────────┘  事件   └────────┬─────────┘
                                                                    │ ACP/stdio
@@ -33,7 +33,7 @@ ESP32-S3                         云端                     OpenClaw 所在电�
                                                           └──────────────────┘
 ```
 
-- **设备实现**：本地唤醒、VAD、录音、播放、屏幕和 Device Link；ESP32 是
+- **设备实现**：本地唤醒、录音、播放、屏幕和 Device Link；ESP32 是
   第一个参考实现，其他设备平台可以实现相同协议。
 - **Relay**：设备鉴权、流式 ASR/TTS、Turn 编排、背压和 Connector 路由，不
   持有 OpenClaw 凭据。
@@ -44,7 +44,7 @@ ESP32-S3                         云端                     OpenClaw 所在电�
 
 - ATK-DNESP32S3 + ES8388
 - 独立 ESP-IDF 固件
-- 按键说话，以及可选 ESP-SR WakeNet/VAD 构建
+- 按键说话，以及可选 ESP-SR WakeNet 构建；WakeNet 轮次由 Relay 判停
 - 半双工 PCM 音频和 WSS
 - TypeScript Relay 与 Connector
 - OpenClaw ACP 本机适配器
