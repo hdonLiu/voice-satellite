@@ -7,6 +7,7 @@
 #include "esp_crt_bundle.h"
 #include "esp_check.h"
 #include "esp_event.h"
+#include "esp_heap_caps.h"
 #include "esp_log.h"
 #include "esp_netif.h"
 #include "esp_websocket_client.h"
@@ -22,6 +23,11 @@ static esp_websocket_client_handle_t websocket;
 static vs_transport_callback_t callback;
 static void *callback_context;
 static atomic_bool connected;
+
+// Device Link v1 messages are deliberately small: 640-byte PCM payloads plus
+// their binary envelope, and short JSON control messages. Keeping this buffer
+// bounded leaves enough contiguous internal RAM for the TLS session.
+static const int WEBSOCKET_BUFFER_SIZE = 8 * 1024;
 
 static void wifi_handler(void *arg, esp_event_base_t base, int32_t id, void *data) {
     (void)arg; (void)data;
@@ -104,13 +110,16 @@ esp_err_t vs_transport_start(const char *url, const char *token,
     esp_websocket_client_config_t config = {
         .uri = url,
         .headers = headers,
-        .buffer_size = 128 * 1024,
+        .buffer_size = WEBSOCKET_BUFFER_SIZE,
         .network_timeout_ms = 10000,
         .reconnect_timeout_ms = 2000,
         .crt_bundle_attach = esp_crt_bundle_attach,
     };
     websocket = esp_websocket_client_init(&config);
     if (!websocket) return ESP_ERR_NO_MEM;
+    ESP_LOGI(TAG, "WSS client initialized: internal heap free=%lu, largest=%lu",
+             (unsigned long)heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT),
+             (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
     ESP_ERROR_CHECK(esp_websocket_register_events(websocket, WEBSOCKET_EVENT_ANY,
                                                    websocket_handler, NULL));
     return esp_websocket_client_start(websocket);
