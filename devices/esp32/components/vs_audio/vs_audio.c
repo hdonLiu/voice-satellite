@@ -25,8 +25,11 @@ static StaticQueue_t playback_queue_control;
 static uint8_t *playback_queue_storage;
 static atomic_uint pending_playback_frames;
 static esp_ae_rate_cvt_handle_t input_resampler;
+static int16_t *input_resampler_output;
+static uint32_t input_resampler_output_capacity;
 
 #define PLAYBACK_QUEUE_FRAMES 100
+#define NATIVE_INPUT_SAMPLES_PER_FRAME (VS_BOARD_CAPTURE_RATE_HZ / 50)
 
 typedef struct {
     uint32_t generation;
@@ -35,26 +38,40 @@ typedef struct {
 
 static void capture_task(void *context) {
     (void)context;
-    int16_t native[480];
+    int16_t native[NATIVE_INPUT_SAMPLES_PER_FRAME];
     int16_t protocol[VS_INPUT_SAMPLES_PER_FRAME];
+    size_t protocol_samples = 0;
     while (true) {
-        if (vs_board_audio_read(native, 480) != ESP_OK) {
+        if (vs_board_audio_read(native, NATIVE_INPUT_SAMPLES_PER_FRAME) != ESP_OK) {
             ESP_LOGW(TAG, "audio capture read failed");
             vTaskDelay(pdMS_TO_TICKS(20));
             continue;
         }
-        uint32_t output_samples = VS_INPUT_SAMPLES_PER_FRAME;
+        uint32_t output_samples = input_resampler_output_capacity;
         esp_ae_err_t result = esp_ae_rate_cvt_process(
-            input_resampler, (esp_ae_sample_t)native, 480, (esp_ae_sample_t)protocol,
-            &output_samples);
-        if (result != ESP_AE_ERR_OK || output_samples != VS_INPUT_SAMPLES_PER_FRAME) {
+            input_resampler, (esp_ae_sample_t)native, NATIVE_INPUT_SAMPLES_PER_FRAME,
+            (esp_ae_sample_t)input_resampler_output, &output_samples);
+        if (result != ESP_AE_ERR_OK) {
             ESP_LOGW(TAG, "resampler failed (%d), produced %" PRIu32 " samples", result,
                      output_samples);
             continue;
         }
-        if (monitor_callback) monitor_callback(protocol, VS_INPUT_SAMPLES_PER_FRAME, callback_context);
-        if (atomic_load(&capture_enabled) && capture_callback)
-            capture_callback(protocol, VS_INPUT_SAMPLES_PER_FRAME, callback_context);
+        size_t consumed = 0;
+        while (consumed < output_samples) {
+            size_t available = VS_INPUT_SAMPLES_PER_FRAME - protocol_samples;
+            size_t remaining = output_samples - consumed;
+            size_t copied = remaining < available ? remaining : available;
+            memcpy(protocol + protocol_samples, input_resampler_output + consumed,
+                   copied * sizeof(int16_t));
+            protocol_samples += copied;
+            consumed += copied;
+            if (protocol_samples != VS_INPUT_SAMPLES_PER_FRAME) continue;
+            if (monitor_callback)
+                monitor_callback(protocol, VS_INPUT_SAMPLES_PER_FRAME, callback_context);
+            if (atomic_load(&capture_enabled) && capture_callback)
+                capture_callback(protocol, VS_INPUT_SAMPLES_PER_FRAME, callback_context);
+            protocol_samples = 0;
+        }
     }
 }
 
@@ -94,6 +111,17 @@ esp_err_t vs_audio_init(vs_audio_capture_callback_t capture, vs_audio_monitor_ca
                  resampler_result);
         return ESP_FAIL;
     }
+    resampler_result = esp_ae_rate_cvt_get_max_out_sample_num(
+        input_resampler, NATIVE_INPUT_SAMPLES_PER_FRAME, &input_resampler_output_capacity);
+    if (resampler_result != ESP_AE_ERR_OK ||
+        input_resampler_output_capacity < VS_INPUT_SAMPLES_PER_FRAME) {
+        ESP_LOGE(TAG, "failed to size input resampler buffer (%d, %" PRIu32 " samples)",
+                 resampler_result, input_resampler_output_capacity);
+        return ESP_FAIL;
+    }
+    input_resampler_output = heap_caps_malloc(input_resampler_output_capacity * sizeof(int16_t),
+                                              MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    if (!input_resampler_output) return ESP_ERR_NO_MEM;
     playback_queue_storage = heap_caps_malloc(PLAYBACK_QUEUE_FRAMES * sizeof(playback_frame_t),
                                               MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT);
     if (!playback_queue_storage) return ESP_ERR_NO_MEM;
