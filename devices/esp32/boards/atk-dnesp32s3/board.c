@@ -14,7 +14,6 @@
 #include "esp_lcd_panel_ops.h"
 #include "esp_lcd_panel_vendor.h"
 #include "esp_log.h"
-#include "esp_rom_sys.h"
 #include "esp_lvgl_port.h"
 #include "esp_timer.h"
 #include "fonts/fonts.h"
@@ -51,40 +50,6 @@ static lv_obj_t *display_wave_bars[DISPLAY_WAVE_BAR_COUNT];
 static int64_t display_last_level_update_us;
 static uint32_t display_smoothed_level;
 
-static void recover_i2c_lines(void) {
-    const gpio_config_t config = {
-        .pin_bit_mask = (1ULL << ATK_I2C_SDA) | (1ULL << ATK_I2C_SCL),
-        .mode = GPIO_MODE_INPUT_OUTPUT_OD,
-        .pull_up_en = GPIO_PULLUP_ENABLE,
-        .pull_down_en = GPIO_PULLDOWN_DISABLE,
-        .intr_type = GPIO_INTR_DISABLE,
-    };
-    ESP_ERROR_CHECK(gpio_config(&config));
-    gpio_set_level(ATK_I2C_SDA, 1);
-    gpio_set_level(ATK_I2C_SCL, 1);
-    esp_rom_delay_us(20);
-
-    ESP_LOGW(TAG, "I2C rescue before: SDA=%d SCL=%d",
-             gpio_get_level(ATK_I2C_SDA), gpio_get_level(ATK_I2C_SCL));
-
-    for (int pulse = 0; pulse < 16 && gpio_get_level(ATK_I2C_SDA) == 0; ++pulse) {
-        gpio_set_level(ATK_I2C_SCL, 0);
-        esp_rom_delay_us(10);
-        gpio_set_level(ATK_I2C_SCL, 1);
-        esp_rom_delay_us(10);
-    }
-
-    gpio_set_level(ATK_I2C_SDA, 0);
-    esp_rom_delay_us(10);
-    gpio_set_level(ATK_I2C_SCL, 1);
-    esp_rom_delay_us(10);
-    gpio_set_level(ATK_I2C_SDA, 1);
-    esp_rom_delay_us(20);
-
-    ESP_LOGW(TAG, "I2C rescue after: SDA=%d SCL=%d",
-             gpio_get_level(ATK_I2C_SDA), gpio_get_level(ATK_I2C_SCL));
-}
-
 static esp_err_t xl9555_write(uint8_t reg, uint8_t value) {
     const uint8_t data[] = {reg, value};
     return i2c_master_transmit(xl9555, data, sizeof(data), 1000);
@@ -107,7 +72,7 @@ static esp_err_t initialize_xl9555(void) {
     const i2c_device_config_t config = {
         .dev_addr_length = I2C_ADDR_BIT_LEN_7,
         .device_address = ATK_XL9555_ADDR,
-        .scl_speed_hz = 100000,
+        .scl_speed_hz = 400000,
     };
     ESP_RETURN_ON_ERROR(i2c_master_bus_add_device(i2c_bus, &config, &xl9555), TAG,
                         "xl9555 device");
@@ -375,7 +340,6 @@ static void button_task(void *context) {
 }
 
 static esp_err_t initialize_i2c(void) {
-    recover_i2c_lines();
     const i2c_master_bus_config_t config = {
         .i2c_port = I2C_NUM_0,
         .sda_io_num = ATK_I2C_SDA,
